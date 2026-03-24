@@ -10,8 +10,11 @@ Usage:
 import argparse
 import os
 import platform
+import shutil
 import subprocess
 import sys
+
+import re
 
 import readchar
 import requests
@@ -39,6 +42,7 @@ console = Console(theme=custom_theme)
 # Constants
 API_URL = "https://apibay.org/q.php"
 MAX_RESULTS = 20
+DOWNLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
 
 TRACKERS = [
     "udp://tracker.opentrackr.org:1337/announce",
@@ -64,6 +68,17 @@ def format_size(size_bytes: int) -> str:
         size /= 1024
         idx += 1
     return f"{size:.1f} {units[idx]}"
+
+
+def parse_size_to_bytes(size_str: str) -> int:
+    """Parse a human-readable size string like '5.0 MB' or '2.6 GB' to bytes."""
+    match = re.match(r"([\d.]+)\s*(B|KB|MB|GB|TB)", size_str.strip(), re.IGNORECASE)
+    if not match:
+        return 0
+    value = float(match.group(1))
+    unit = match.group(2).upper()
+    multipliers = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+    return int(value * multipliers.get(unit, 1))
 
 
 def seed_style(seeds: int) -> str:
@@ -105,6 +120,82 @@ def open_magnet(magnet_link: str) -> None:
     except Exception as e:
         console.print(f"[error] Failed to open magnet link: {e}[/error]")
         console.print(f"[info]Magnet link:[/info] {magnet_link}")
+
+
+def has_webtorrent() -> bool:
+    """Check if webtorrent-cli is installed."""
+    return shutil.which("webtorrent") is not None
+
+
+def download_with_webtorrent(magnet_link: str) -> None:
+    """Download torrent content directly using webtorrent-cli.
+
+    Runs webtorrent in the terminal directly (no stdout piping) so its
+    built-in progress UI renders natively. webtorrent-cli uses console.clear()
+    and full-screen redraws with ANSI codes, which cannot be parsed via pipe.
+    """
+    wt_path = shutil.which("webtorrent")
+    if not wt_path:
+        console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
+        return
+
+    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
+    console.print("[dim]Press Ctrl+C to cancel the download.[/dim]\n")
+
+    try:
+        result = subprocess.run(
+            [wt_path, "download", magnet_link, "--out", DOWNLOADS_DIR],
+        )
+
+        console.print()
+        if result.returncode == 0:
+            console.print("[success] Download complete![/success]")
+            console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        else:
+            console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
+
+    except KeyboardInterrupt:
+        console.print("\n[warning] Download cancelled.[/warning]\n")
+    except FileNotFoundError:
+        console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
+
+
+def download_method_prompt() -> str | None:
+    """
+    Prompt the user to choose a download method.
+    Returns 't' for torrent client, 'd' for direct download, None for cancel.
+    """
+    wt_available = has_webtorrent()
+
+    console.print("[title]Download method:[/title]")
+    console.print("  [bold cyan][T][/bold cyan] Open in torrent client (qBittorrent)")
+    if wt_available:
+        console.print("  [bold cyan][D][/bold cyan] Download directly (webtorrent)")
+        console.print("      [dim yellow]Will not seed after download. Slower than torrent client.[/dim yellow]")
+    else:
+        console.print("  [dim][D] Download directly (webtorrent not installed)[/dim]")
+    console.print("  [bold cyan][C][/bold cyan] Cancel")
+    console.print()
+
+    try:
+        choice = console.input("[info]Choose [T/D/C]:[/info] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return None
+
+    if choice in ("t", ""):
+        return "t"
+    elif choice == "d":
+        if not wt_available:
+            console.print("[error] webtorrent-cli is not installed.[/error]")
+            console.print("[info]Install with:[/info] npm install -g webtorrent-cli\n")
+            return None
+        return "d"
+    elif choice == "c":
+        return None
+    else:
+        console.print("[warning] Invalid choice.[/warning]")
+        return None
 
 
 # API
@@ -323,13 +414,22 @@ def main() -> None:
         name = selected.get("name", "Unknown")
         info_hash = selected.get("info_hash", "")
 
-        console.print(f"\n[success] Selected:[/success] [highlight]{name}[/highlight]")
+        console.print(f"\n[success] Selected:[/success] [highlight]{name}[/highlight]\n")
 
-        # Download
+        # Download method selection
         magnet = build_magnet(info_hash, name)
-        console.print("[info]Opening magnet link with default torrent client...[/info]")
-        open_magnet(magnet)
-        console.print("[success] Magnet link sent to torrent client![/success]\n")
+        method = download_method_prompt()
+
+        if method == "t":
+            console.print("[info]Opening magnet link with default torrent client...[/info]")
+            open_magnet(magnet)
+            console.print("[success] Magnet link sent to torrent client![/success]\n")
+        elif method == "d":
+            download_with_webtorrent(magnet)
+        else:
+            console.print("[info]Download cancelled.[/info]\n")
+            query = None
+            continue
 
         # Continue?
         try:
