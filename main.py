@@ -3,251 +3,22 @@
 Torrent Search CLI — Search for torrents and download via magnet link.
 
 Usage:
-    python torrent_search.py              # Interactive prompt
-    python torrent_search.py -q "query"   # Direct search
+    python main.py              # Interactive prompt
+    python main.py -q "query"   # Direct search
 """
 import argparse
-import os
-import platform
-import shutil
-import subprocess
-import sys
-
-import re
+import math
 
 import readchar
 import requests
-from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.theme import Theme
 
-# Theme & Console
-custom_theme = Theme(
-    {
-        "title": "bold magenta",
-        "info": "dim cyan",
-        "success": "bold green",
-        "warning": "bold yellow",
-        "error": "bold red",
-        "highlight": "bold white",
-    }
-)
-
-console = Console(theme=custom_theme)
-
-# Constants
-API_URL = "https://apibay.org/q.php"
-RESULTS_PER_PAGE = 20
-DOWNLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
-
-TRACKERS = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://tracker.bittor.pw:1337/announce",
-    "udp://public.popcorn-tracker.org:6969/announce",
-    "udp://tracker.dler.org:6969/announce",
-    "udp://exodus.desync.com:6969",
-    "udp://open.demonii.com:1337/announce",
-]
-
-# Utilities
-def format_size(size_bytes: int) -> str:
-    """Convert bytes to a human-readable string."""
-    if size_bytes <= 0:
-        return "N/A"
-    units = ["B", "KB", "MB", "GB", "TB"]
-    idx = 0
-    size = float(size_bytes)
-    while size >= 1024 and idx < len(units) - 1:
-        size /= 1024
-        idx += 1
-    return f"{size:.1f} {units[idx]}"
-
-def parse_size_to_bytes(size_str: str) -> int:
-    """Parse a human-readable size string like '5.0 MB' or '2.6 GB' to bytes."""
-    match = re.match(r"([\d.]+)\s*(B|KB|MB|GB|TB)", size_str.strip(), re.IGNORECASE)
-    if not match:
-        return 0
-    value = float(match.group(1))
-    unit = match.group(2).upper()
-    multipliers = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
-    return int(value * multipliers.get(unit, 1))
-
-def seed_style(seeds: int) -> str:
-    """Return a rich color tag based on seed count."""
-    if seeds >= 50:
-        return "bold green"
-    elif seeds >= 10:
-        return "green"
-    elif seeds >= 1:
-        return "yellow"
-    return "red"
-
-def leech_style(leeches: int) -> str:
-    """Return a rich color tag based on leech count."""
-    if leeches <= 5:
-        return "dim white"
-    elif leeches <= 50:
-        return "yellow"
-    return "red"
-
-def build_magnet(info_hash: str, name: str) -> str:
-    """Build a magnet URI from an info hash."""
-    trackers = "&".join(f"tr={t}" for t in TRACKERS)
-    return f"magnet:?xt=urn:btih:{info_hash}&dn={name}&{trackers}"
-
-def open_magnet(magnet_link: str) -> None:
-    """Open a magnet link with the system default handler (qBittorrent, etc.)."""
-    system = platform.system()
-    try:
-        if system == "Windows":
-            os.startfile(magnet_link)
-        elif system == "Darwin":
-            subprocess.Popen(["open", magnet_link])
-        else:
-            subprocess.Popen(["xdg-open", magnet_link])
-    except Exception as e:
-        console.print(f"[error] Failed to open magnet link: {e}[/error]")
-        console.print(f"[info]Magnet link:[/info] {magnet_link}")
-
-def detect_torrent_client() -> str:
-    """Detect the installed torrent client.
-
-    On Windows, scans common install directories first, then checks PATH, then the registry.
-    """
-    # Known torrent client executables and their friendly names
-    KNOWN_CLIENTS = {
-        "qbittorrent": "qBittorrent",
-        "utorrent": "uTorrent",
-        "bittorrent": "BitTorrent",
-        "deluge": "Deluge",
-        "transmission-qt": "Transmission",
-        "transmission-gtk": "Transmission",
-        "vuze": "Vuze",
-        "tixati": "Tixati",
-        "biglybt": "BiglyBT",
-    }
-
-    # 1. Windows: scan common install directories
-    if platform.system() == "Windows":
-        search_dirs = [
-            os.environ.get("PROGRAMFILES", r"C:\Program Files"),
-            os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs"),
-        ]
-        for search_dir in search_dirs:
-            if not search_dir or not os.path.isdir(search_dir):
-                continue
-            try:
-                for folder in os.listdir(search_dir):
-                    folder_lower = folder.lower()
-                    for key, name in KNOWN_CLIENTS.items():
-                        if key in folder_lower:
-                            return name
-            except OSError:
-                continue
-
-    # 2. Check PATH
-    for exe, name in KNOWN_CLIENTS.items():
-        if shutil.which(exe):
-            return name
-
-    # 3. Windows fallback: read the registry magnet: handler
-    if platform.system() == "Windows":
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"magnet\shell\open\command") as key:
-                cmd = winreg.QueryValueEx(key, "")[0]
-                exe_match = re.search(r'([\w.-]+)\.exe', cmd, re.IGNORECASE)
-                if exe_match:
-                    exe_name = exe_match.group(1).lower()
-                    for known_key, friendly_name in KNOWN_CLIENTS.items():
-                        if known_key in exe_name:
-                            return friendly_name
-                    return exe_match.group(1).capitalize()
-        except (OSError, ImportError):
-            pass
-
-    return "default torrent client"
-
-def has_webtorrent() -> bool:
-    """Check if webtorrent-cli is installed."""
-    return shutil.which("webtorrent") is not None
-
-def download_with_webtorrent(magnet_link: str) -> None:
-    """Download torrent content directly using webtorrent-cli.
-
-    Runs webtorrent in the terminal directly (no stdout piping) so its
-    built-in progress UI renders natively. webtorrent-cli uses console.clear()
-    and full-screen redraws with ANSI codes, which cannot be parsed via pipe.
-    """
-    wt_path = shutil.which("webtorrent")
-    if not wt_path:
-        console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
-        return
-
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
-    console.print("[dim]Press Ctrl+C to cancel the download.[/dim]\n")
-
-    try:
-        result = subprocess.run(
-            [wt_path, "download", magnet_link, "--out", DOWNLOADS_DIR],
-        )
-
-        console.print()
-        if result.returncode == 0:
-            console.print("[success] Download complete![/success]")
-            console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
-        else:
-            console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
-
-    except KeyboardInterrupt:
-        console.print("\n[warning] Download cancelled.[/warning]\n")
-    except FileNotFoundError:
-        console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
-
-def download_method_prompt() -> str | None:
-    """
-    Prompt the user to choose a download method.
-    Returns 't' for torrent client, 'd' for direct download, None for cancel.
-    """
-    wt_available = has_webtorrent()
-
-    client_name = detect_torrent_client()
-
-    console.print("[title]Download method:[/title]")
-    console.print(f"  [bold cyan][T][/bold cyan] Open in {client_name}")
-    if wt_available:
-        console.print("  [bold cyan][D][/bold cyan] Download directly (webtorrent)")
-        console.print("      [dim yellow]Will not seed after download. Slower than torrent client.[/dim yellow]")
-    else:
-        console.print("  [dim][D] Download directly (webtorrent not installed)[/dim]")
-    console.print("  [bold cyan][C][/bold cyan] Cancel")
-    console.print()
-
-    try:
-        choice = console.input("[info]Choose [T/D/C]:[/info] ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        return None
-
-    if choice in ("t", ""):
-        return "t"
-    elif choice == "d":
-        if not wt_available:
-            console.print("[error] webtorrent-cli is not installed.[/error]")
-            console.print("[info]Install with:[/info] npm install -g webtorrent-cli\n")
-            return None
-        return "d"
-    elif choice == "c":
-        return None
-    else:
-        console.print("[warning] Invalid choice.[/warning]")
-        return None
+from constants import API_URL, RESULTS_PER_PAGE, console
+from downloader import download_method_prompt, download_with_webtorrent, open_magnet
+from utils import build_magnet, format_size, leech_style, seed_style
 
 # API
 
@@ -271,6 +42,7 @@ def search_torrents(query: str) -> list[dict]:
     return data
 
 # Interactive Table Selection
+
 def build_table(
     results: list[dict],
     selected_idx: int,
@@ -354,8 +126,6 @@ def interactive_select(results: list[dict]) -> int | None:
     switch pages. Returns the global index of the selected result, or
     None if cancelled.
     """
-    import math
-
     all_results = results
     total_all = len(all_results)
     total_pages = math.ceil(total_all / RESULTS_PER_PAGE)
@@ -458,6 +228,7 @@ def interactive_select(results: list[dict]) -> int | None:
             )
 
     return None
+
 
 # Main Loop
 def print_banner() -> None:

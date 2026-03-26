@@ -1,2 +1,2 @@
 @echo off
-python "%~dp0torrent_search.py" %*
+python "%~dp0main.py" %*
