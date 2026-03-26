@@ -10,6 +10,7 @@ from downloader import (
     has_webtorrent,
     open_magnet,
 )
+from providers import PROVIDERS
 
 
 def print_banner() -> None:
@@ -63,3 +64,34 @@ def download_method_prompt() -> str | None:
     else:
         console.print("[warning] Invalid choice.[/warning]")
         return None
+
+
+def provider_select_prompt() -> object | None:
+    """Prompt the user to select a torrent provider. Returns the provider object or None if cancelled."""
+    console.print("[title]Select Provider:[/title]")
+    
+    options = []
+    for i, p in enumerate(PROVIDERS, 1):
+        options.append(f"[{i}] {p.label}")
+        
+    console.print("    ".join(options))
+    console.print()
+    
+    max_choice = len(PROVIDERS)
+    
+    while True:
+        try:
+            choice = console.input(f"[info]Choose [1-{max_choice}] (default 1):[/info] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+            
+        if not choice:
+            return PROVIDERS[0]
+            
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(PROVIDERS):
+                return PROVIDERS[idx]
+                
+        console.print("[warning] Invalid choice. Try again.[/warning]")
+

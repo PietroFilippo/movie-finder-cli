@@ -10,8 +10,8 @@ import argparse
 
 from constants import console
 from downloader import download_with_webtorrent, open_magnet
-from providers import PROVIDERS
-from ui.prompts import download_method_prompt, print_banner
+from providers import PROVIDERS, get_provider
+from ui.prompts import download_method_prompt, print_banner, provider_select_prompt
 from ui.table import interactive_select
 from utils import build_magnet
 
@@ -19,20 +19,39 @@ from utils import build_magnet
 def main() -> None:
     parser = argparse.ArgumentParser(description="Search and download torrents.")
     parser.add_argument("-q", "--query", type=str, help="Search query (skip prompt)")
+    parser.add_argument("-t", "--type", type=str, choices=["movie", "game", "anime"], help="Search type (default: movie if used with -q)")
     args = parser.parse_args()
 
     print_banner()
 
-    # Default provider (Movies)
-    provider = PROVIDERS[0]
-
     query = args.query
+    initial_provider = None
+
+    if args.type:
+        initial_provider = get_provider(args.type)
+        if not initial_provider:
+            console.print(f"[warning] Unknown provider type '{args.type}'. Falling back to Movies.[/warning]")
+            initial_provider = PROVIDERS[0]
+    elif query:
+        # Backward compatibility: if -q is passed but no -t, default to Movies
+        initial_provider = PROVIDERS[0]
+
+    session_provider = initial_provider
 
     while True:
-        # Get query
+        provider = session_provider
+
+        # 1. Ask for provider if not set by CLI
+        if not provider:
+            provider = provider_select_prompt()
+            if not provider:
+                console.print("\n[info]Goodbye![/info]")
+                break
+
+        # 2. Get query
         if not query:
             try:
-                query = console.input("[title] Search torrent:[/title] ").strip()
+                query = console.input(f"[title] Search {provider.name}:[/title] ").strip()
             except (EOFError, KeyboardInterrupt):
                 console.print("\n[info]Goodbye![/info]")
                 break
@@ -43,7 +62,7 @@ def main() -> None:
             continue
 
         # Search using provider
-        console.print(f"[info]Searching for:[/info] [highlight]{query}[/highlight]...")
+        console.print(f"[info]Searching {provider.name} for:[/info] [highlight]{query}[/highlight]...")
 
         results = provider.search(query)
         if not results:
