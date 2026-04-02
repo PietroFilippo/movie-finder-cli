@@ -8,6 +8,7 @@ class GameProvider(BaseProvider):
     name = "Games"
     icon = "🎮"
     categories = [400, 401]  # Games All, PC Games
+    solidtorrents_category = "Game"
 
     default_filters = FilterConfig(exclude_keywords=["update only", "update v"])
     presets = [
