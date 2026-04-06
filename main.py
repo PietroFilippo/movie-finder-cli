@@ -116,7 +116,8 @@ def main() -> None:
         magnet = build_magnet(info_hash, name)
         
         while True:
-            method = download_method_prompt()
+            show_subs = hasattr(provider, "name") and provider.name in ("Movies", "Anime")
+            method = download_method_prompt(show_subtitles=show_subs)
 
             if method == "t":
                 clear_screen()

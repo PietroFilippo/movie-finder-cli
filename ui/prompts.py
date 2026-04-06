@@ -123,7 +123,7 @@ def clear_screen() -> None:
     print_banner()
 
 
-def download_method_prompt() -> str | None:
+def download_method_prompt(show_subtitles: bool = True) -> str | None:
     """
     Prompt the user to choose a download method.
     Returns 't' for torrent client, 'd' for direct download, None for cancel.
@@ -139,13 +139,16 @@ def download_method_prompt() -> str | None:
         console.print("      [dim yellow]Will not seed after download. Slower than torrent client.[/dim yellow]")
     else:
         console.print("  [dim][D] Download directly (webtorrent not installed)[/dim]")
-    console.print("  [bold cyan][S][/bold cyan] Search & Download Subtitles")
+    if show_subtitles:
+        console.print("  [bold cyan][S][/bold cyan] Search & Download Subtitles")
     console.print("  [bold cyan][C][/bold cyan] Cancel")
     console.print()
 
+    choices_str = "[T/D/S/C]" if show_subtitles else "[T/D/C]"
+
     while True:
         try:
-            choice = console.input("[info]Choose [T/D/S/C]:[/info] ").strip().lower()
+            choice = console.input(f"[info]Choose {choices_str}:[/info] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             return None
 
@@ -157,7 +160,7 @@ def download_method_prompt() -> str | None:
                 console.print("[info]Install with:[/info] npm install -g webtorrent-cli\n")
                 continue
             return "d"
-        elif choice == "s":
+        elif choice == "s" and show_subtitles:
             return "s"
         elif choice == "c":
             return None
@@ -175,6 +178,10 @@ def provider_select_prompt() -> object | None:
         options.append(f"[{i}] {p.label}")
         
     console.print("    ".join(options))
+    console.print()
+    
+    console.print("[dim]Tip: For the best results, search using the complete name.[/dim]")
+    console.print("[dim]Press Ctrl+C at any time to exit.[/dim]")
     console.print()
     
     max_choice = len(PROVIDERS)
