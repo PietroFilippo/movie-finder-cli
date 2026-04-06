@@ -12,6 +12,7 @@ A interactive command-line application for searching and downloading torrents di
 - **Flexible Downloading:**
   - **System Client:** Automatically send generated magnet links to your default system torrent client (like qBittorrent, Transmission, etc.).
   - **Direct Terminal Download:** Use `webtorrent-cli` integration to download files directly within the terminal, featuring native interactive progress bars.
+  - **Subtitle Download:** Search and download the best matching subtitles directly from the terminal using `subliminal`.
 - **Pagination:** Navigate through large sets of search results cleanly without cluttering the screen.
 
 ## Prerequisites
@@ -79,4 +80,5 @@ The application is structured into a modular, provider-based architecture:
 - `ui/`: Controls the interactive terminal prompts and rendering of tables using the `rich` library.
 - `filters.py`: Logic processing for including or excluding keywords.
 - `downloader.py`: Logic handling torrent client detection and `webtorrent-cli` execution.
+- `subtitles.py`: Logic for searching and downloading subtitles using `subliminal`.
 - `constants.py`: Stores configuration constants, trackers, and UI themes.
