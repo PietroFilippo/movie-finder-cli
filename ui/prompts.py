@@ -14,6 +14,7 @@ from downloader import (
     open_magnet,
 )
 from providers import PROVIDERS
+from ui.selector import SelectItem, arrow_select
 
 
 def get_query_with_shortcut(prompt_str: str) -> str | None:
@@ -60,45 +61,45 @@ def filter_menu(provider) -> None:
     if not provider.presets:
         console.print("[warning] No presets available for this provider.[/warning]")
         return
-        
-    while True:
-        clear_screen()
-        console.print(f"\n[title]Filter Presets for {provider.label}:[/title]")
-        options = ["[0] Clear all filters"]
-        for i, p in enumerate(provider.presets, 1):
-            is_active = p in provider.active_presets
-            prefix = "[bold green]✓[/bold green]" if is_active else "[dim] [/dim]"
-            options.append(f"{prefix} [{i}] {p.name}")
-            
-        for opt in options:
-            console.print(f"  {opt}")
-        console.print()
-        
-        try:
-            choice = console.input(f"[info]Select preset to toggle [1-{len(provider.presets)}] (0 to clear, Enter to return):[/info] ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return
-            
-        if not choice:
-            return
-            
-        if choice.isdigit():
-            idx = int(choice)
-            if idx == 0:
-                provider.active_presets.clear()
-                console.print("[success] All filters cleared.[/success]")
-            elif 1 <= idx <= len(provider.presets):
-                preset = provider.presets[idx - 1]
-                if preset in provider.active_presets:
-                    provider.active_presets.remove(preset)
-                    console.print(f"[success] Removed preset: {preset.name}[/success]")
-                else:
-                    provider.active_presets.append(preset)
-                    console.print(f"[success] Activated preset: {preset.name}[/success]")
-            else:
-                console.print("[warning] Invalid choice.[/warning]")
-        else:
-            console.print("[warning] Invalid choice.[/warning]")
+
+    clear_screen()
+
+    # Build toggle items: first item is "Clear all filters", rest are presets
+    items = [SelectItem(label="Clear all filters", value="clear")]
+    for p in provider.presets:
+        items.append(SelectItem(
+            label=p.name,
+            value=p,
+            toggled=p in provider.active_presets,
+        ))
+
+    result = arrow_select(
+        items,
+        title=f"Filter Presets — {provider.label}",
+        multi=True,
+        footer="↑/↓ navigate  •  Space toggle  •  Enter confirm  •  Esc cancel",
+    )
+
+    if result is None:
+        return
+
+    # Check if "Clear all" was toggled
+    if 0 in result:
+        provider.active_presets.clear()
+        console.print("[success] All filters cleared.[/success]")
+        return
+
+    # Apply toggled presets
+    provider.active_presets.clear()
+    for idx in result:
+        preset = items[idx].value
+        provider.active_presets.append(preset)
+
+    active_names = [p.name for p in provider.active_presets]
+    if active_names:
+        console.print(f"[success] Active filters: {', '.join(active_names)}[/success]")
+    else:
+        console.print("[success] All filters cleared.[/success]")
 
 
 def print_banner() -> None:
@@ -126,79 +127,53 @@ def clear_screen() -> None:
 def download_method_prompt(show_subtitles: bool = True) -> str | None:
     """
     Prompt the user to choose a download method.
-    Returns 't' for torrent client, 'd' for direct download, None for cancel.
+    Returns 't' for torrent client, 'd' for direct download, 's' for subtitles, None for cancel.
     """
     wt_available = has_webtorrent()
-
     client_name = detect_torrent_client()
 
-    console.print("[title]Download method:[/title]")
-    console.print(f"  [bold cyan][T][/bold cyan] Open in {client_name}")
-    if wt_available:
-        console.print("  [bold cyan][D][/bold cyan] Download directly (webtorrent)")
-        console.print("      [dim yellow]Will not seed after download. Slower than torrent client.[/dim yellow]")
-    else:
-        console.print("  [dim][D] Download directly (webtorrent not installed)[/dim]")
+    items = [
+        SelectItem(
+            label=f"Open in {client_name}",
+            value="t",
+        ),
+        SelectItem(
+            label="Download directly (webtorrent)",
+            value="d",
+            enabled=wt_available,
+            hint="" if wt_available else "(not installed)",
+        ),
+    ]
+
     if show_subtitles:
-        console.print("  [bold cyan][S][/bold cyan] Search & Download Subtitles")
-    console.print("  [bold cyan][C][/bold cyan] Cancel")
-    console.print()
+        items.append(SelectItem(
+            label="Search & Download Subtitles",
+            value="s",
+        ))
 
-    choices_str = "[T/D/S/C]" if show_subtitles else "[T/D/C]"
+    items.append(SelectItem(label="Cancel", value=None))
 
-    while True:
-        try:
-            choice = console.input(f"[info]Choose {choices_str}:[/info] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return None
+    idx = arrow_select(items, title="Download Method")
 
-        if choice in ("t", ""):
-            return "t"
-        elif choice == "d":
-            if not wt_available:
-                console.print("[error] webtorrent-cli is not installed.[/error]")
-                console.print("[info]Install with:[/info] npm install -g webtorrent-cli\n")
-                continue
-            return "d"
-        elif choice == "s" and show_subtitles:
-            return "s"
-        elif choice == "c":
-            return None
-        else:
-            console.print("[warning] Invalid choice. Please try again.[/warning]")
+    if idx is None:
+        return None
+
+    return items[idx].value
 
 
 def provider_select_prompt() -> object | None:
     """Prompt the user to select a torrent provider. Returns the provider object or None if cancelled."""
     clear_screen()
-    console.print("[title]Select Provider:[/title]")
-    
-    options = []
-    for i, p in enumerate(PROVIDERS, 1):
-        options.append(f"[{i}] {p.label}")
-        
-    console.print("    ".join(options))
-    console.print()
-    
-    console.print("[dim]Tip: For the best results, search using the complete name.[/dim]")
-    console.print("[dim]Press Ctrl+C at any time to exit.[/dim]")
-    console.print()
-    
-    max_choice = len(PROVIDERS)
-    
-    while True:
-        try:
-            choice = console.input(f"[info]Choose [1-{max_choice}] (default 1):[/info] ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return None
-            
-        if not choice:
-            return PROVIDERS[0]
-            
-        if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(PROVIDERS):
-                return PROVIDERS[idx]
-                
-        console.print("[warning] Invalid choice. Try again.[/warning]")
 
+    items = [SelectItem(label=p.label, value=p) for p in PROVIDERS]
+
+    idx = arrow_select(
+        items,
+        title="Select Provider",
+        footer="↑/↓ navigate  •  Enter select  •  Esc cancel\n   Tip: For the best results, search using the complete name.",
+    )
+
+    if idx is None:
+        return None
+
+    return items[idx].value
