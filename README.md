@@ -5,15 +5,16 @@ A interactive command-line application for searching and downloading torrents di
 ## Features
 
 - **Multi-Category Search:** Torrents across different providers (Movies, Games, Anime).
-- **Interactive UI:** Single unified view using custom terminal UI elements for seamless navigation.
+- **Arrow-Key Driven UI:** Fully interactive, flicker-free terminal interface using an alternate screen buffer so your scrollback history stays clean. All prompts (provider selection, filters, download methods) utilize seamless arrow-key navigation.
 - **Advanced Filtering:** 
-  - Toggle built-in presets (e.g., preferred resolutions, known uploaders/repackers).
+  - Toggle built-in presets (e.g., preferred resolutions, known uploaders/repackers) using an interactive checklist.
   - Add custom include/exclude keywords to quickly find the exact release you want.
 - **Flexible Downloading:**
   - **System Client:** Automatically send generated magnet links to your default system torrent client (like qBittorrent, Transmission, etc.).
   - **Direct Terminal Download:** Use `webtorrent-cli` integration to download files directly within the terminal, featuring native interactive progress bars.
   - **Subtitle Download:** Search and download the best matching subtitles directly from the terminal using `subliminal`.
-- **Pagination:** Navigate through large sets of search results cleanly without cluttering the screen.
+  - **Clipboard Integration:** Easily copy magnet links directly to your OS clipboard (Windows/macOS/Linux).
+- **Pagination & Navigation:** Navigate through large sets of search results cleanly, with the ability to safely go back to your previous search results after viewing download options.
 
 ## Prerequisites
 
@@ -39,7 +40,7 @@ A interactive command-line application for searching and downloading torrents di
 
 ### Interactive Mode
 
-The easiest way to use the CLI is to run it interactively. It will guide you through selecting a category, searching, filtering, and downloading.
+The easiest way to use the CLI is to run it interactively. The arrow-key driven UI will guide you through selecting a category, searching, filtering, and downloading.
 
 ```bash
 # On Windows, you can use the provided batch script
@@ -64,12 +65,14 @@ python main.py -q "Elden Ring" -t game
 python main.py -q "Dune" -t movie -f "1080p" -x "cam"
 ```
 
-### Shortcuts in Interactive Mode
+### Navigating the UI
 
-- Use `Up/Down` arrows to navigate lists and tables.
-- Press `Enter` to select an item.
-- Press `Shift+F` on the search prompt to open the interactive filter menu for the current provider.
-- Press `Esc` to go back or cancel a selection.
+- **Lists & Menus**: Use `Up` and `Down` arrows to navigate.
+- **Select**: Press `Enter` to confirm a choice or open a torrent.
+- **Toggle**: In multi-select menus (like Filters), press `Enter` on an item to toggle its checkbox.
+- **Special Actions**: Press `Shift+F` on the search prompt to open the interactive filter menu for the current provider.
+- **Cancel / Back**: Press `Esc` to safely cancel an action, close a menu, or go back to the previous screen.
+
 
 ## Project Architecture
 
