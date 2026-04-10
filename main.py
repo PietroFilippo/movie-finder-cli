@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", message=".*urllib3.*")
 
 from constants import console
 import readchar
-from downloader import download_with_webtorrent, open_magnet
+from downloader import download_with_webtorrent, download_with_peerflix, open_magnet
 from filters import FilterConfig
 from providers import PROVIDERS, get_provider
 from ui.prompts import clear_screen, download_method_prompt, filter_menu, get_query_with_shortcut, print_banner, provider_select_prompt, search_again_prompt
@@ -128,6 +128,12 @@ def main() -> None:
                     open_magnet(magnet)
                     console.print("[success] Magnet link sent to torrent client![/success]\n")
                     console.print("[dim]Press any key to continue...[/dim]")
+                    readchar.readkey()
+                    break
+                elif method == "p":
+                    clear_screen()
+                    download_with_peerflix(magnet)
+                    console.print("\n[dim]Press any key to continue...[/dim]")
                     readchar.readkey()
                     break
                 elif method == "d":

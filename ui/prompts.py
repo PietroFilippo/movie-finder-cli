@@ -11,6 +11,7 @@ from downloader import (
     detect_torrent_client,
     download_with_webtorrent,
     has_webtorrent,
+    has_peerflix,
     open_magnet,
 )
 from providers import PROVIDERS
@@ -137,12 +138,19 @@ def download_method_prompt(magnet: str = "", show_subtitles: bool = True) -> str
     'l' (copy magnet) is handled internally.
     """
     wt_available = has_webtorrent()
+    pf_available = has_peerflix()
     client_name = detect_torrent_client()
 
     items = [
         SelectItem(
             label=f"Open in {client_name}",
             value="t",
+        ),
+        SelectItem(
+            label="Download directly (peerflix)",
+            value="p",
+            enabled=pf_available,
+            hint="Slower, won't seed" if pf_available else "(not installed)",
         ),
         SelectItem(
             label="Download directly (webtorrent)",

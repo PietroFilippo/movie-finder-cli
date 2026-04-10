@@ -85,6 +85,11 @@ def open_magnet(magnet_link: str) -> None:
         console.print(f"[info]Magnet link:[/info] {magnet_link}")
 
 
+def has_peerflix() -> bool:
+    """Check if peerflix is installed."""
+    return shutil.which("peerflix") is not None
+
+
 def has_webtorrent() -> bool:
     """Check if webtorrent-cli is installed."""
     return shutil.which("webtorrent") is not None
@@ -124,3 +129,34 @@ def download_with_webtorrent(magnet_link: str) -> None:
         console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
 
 
+def download_with_peerflix(magnet_link: str) -> None:
+    """Download torrent content directly using peerflix.
+
+    Runs peerflix in the terminal directly (no stdout piping) so its
+    built-in progress UI renders natively.
+    """
+    pf_path = shutil.which("peerflix")
+    if not pf_path:
+        console.print("[error] peerflix not found. Install with: npm install -g peerflix[/error]\n")
+        return
+
+    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
+    console.print("[bold red]To cancel, press CTRL+C at any time.[/bold red]\n")
+
+    try:
+        result = subprocess.run(
+            [pf_path, magnet_link, "--path", DOWNLOADS_DIR],
+        )
+
+        console.print()
+        if result.returncode == 0:
+            console.print("[success] Download complete![/success]")
+            console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        else:
+            console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
+
+    except KeyboardInterrupt:
+        console.print("\n[warning] Download cancelled.[/warning]\n")
+    except FileNotFoundError:
+        console.print("[error] peerflix not found. Install with: npm install -g peerflix[/error]\n")
