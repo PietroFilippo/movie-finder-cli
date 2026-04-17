@@ -36,11 +36,22 @@ def _build_panel(
     for i, item in enumerate(items):
         is_cursor = i == cursor
 
-        # Insert separator before action buttons
-        if multi and has_actions and item.is_action:
+        # Check if this is a section header (visual-only, non-interactive)
+        is_section_header = (
+            item.is_action and not item.enabled
+            and isinstance(item.value, str) and item.value == "section_header"
+        )
+
+        # Insert separator before action buttons (but not section headers)
+        if multi and has_actions and item.is_action and not is_section_header:
             prev = items[i - 1] if i > 0 else None
             if prev and not prev.is_action:
                 body.append("  ─────────────────────────\n", style="dim")
+
+        # Section headers render as dim labels
+        if is_section_header:
+            body.append(f"    {item.label}\n", style="dim bold")
+            continue
 
         # Build the prefix
         if multi and not item.is_action:
@@ -57,7 +68,7 @@ def _build_panel(
 
         # Determine style
         if not item.enabled:
-            style = "dim strikethrough" if is_cursor else "dim"
+            style = "dim"
         elif is_cursor:
             style = "bold cyan"
         else:

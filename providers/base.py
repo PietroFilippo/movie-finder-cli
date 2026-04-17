@@ -3,12 +3,22 @@
 from abc import ABC, abstractmethod
 
 import concurrent.futures
+from dataclasses import dataclass
 from typing import Callable
 
 import requests
 
 from constants import API_URL, console
 from filters import FilterConfig, FilterPreset, apply_filters
+
+
+@dataclass
+class SearchEngine:
+    """A toggleable search engine backend."""
+    name: str
+    icon: str
+    search_fn: Callable[[object, str], list[dict]]  # bound method reference
+    enabled: bool = True
 
 
 class BaseProvider(ABC):
@@ -30,14 +40,18 @@ class BaseProvider(ABC):
     
     def __init__(self):
         self.active_presets: list[FilterPreset] = []
+        self.engines: list[SearchEngine] = self._init_engines()
+
+    def _init_engines(self) -> list[SearchEngine]:
+        """Define available search engines. Override in subclasses to customize."""
+        return [
+            SearchEngine("Apibay", "🏴‍☠️", self._search_apibay, enabled=True),
+            SearchEngine("SolidTorrents", "🔗", self._search_solidtorrents, enabled=True),
+        ]
 
     @property
     def label(self) -> str:
         return f"{self.icon} {self.name}"
-
-    def search_engines(self) -> list[Callable[[str], list[dict]]]:
-        """Return a list of engine search methods to run concurrently."""
-        return [self._search_apibay, self._search_solidtorrents]
 
     def _search_apibay(self, query: str) -> list[dict]:
         """Search Apibay API for the query."""
@@ -89,15 +103,19 @@ class BaseProvider(ABC):
         return results
 
     def search(self, query: str, cli_filters: FilterConfig | None = None) -> list[dict]:
-        """Search all engines concurrently, merge, dedupe, and sort by seeds."""
+        """Search all enabled engines concurrently, merge, dedupe, and sort by seeds."""
         seen_hashes: set[str] = set()
         merged: list[dict] = []
 
-        engines = self.search_engines()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(engines)) as executor:
-            future_to_engine = {executor.submit(engine, query): engine for engine in engines}
+        active_engines = [e for e in self.engines if e.enabled]
+        if not active_engines:
+            return []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_engines)) as executor:
+            future_to_engine = {
+                executor.submit(e.search_fn, query): e for e in active_engines
+            }
             for future in concurrent.futures.as_completed(future_to_engine):
-                engine = future_to_engine[future]
                 try:
                     data = future.result()
                     for item in data:

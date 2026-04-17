@@ -1,12 +1,11 @@
-"""Anime torrent provider — searches video and TV categories."""
+"""Anime torrent provider — searches Nyaa by default, with optional Apibay/SolidTorrents."""
 
 import xml.etree.ElementTree as ET
-from typing import Callable
 
 import requests
 
 from filters import FilterConfig, FilterPreset
-from providers.base import BaseProvider
+from providers.base import BaseProvider, SearchEngine
 
 
 class AnimeProvider(BaseProvider):
@@ -16,14 +15,21 @@ class AnimeProvider(BaseProvider):
     solidtorrents_category = "Anime"
 
     presets = [
-        FilterPreset("HD Quality", FilterConfig(quality=["1080p", "720p"])),
+        FilterPreset("720p", FilterConfig(quality=["720p"])),
+        FilterPreset("1080p", FilterConfig(quality=["1080p"])),
+        FilterPreset("4K", FilterConfig(quality=["2160p", "4k"])),
         FilterPreset("Dual Audio", FilterConfig(include_keywords=["dual audio"])),
         FilterPreset("Subbed", FilterConfig(include_keywords=["sub"])),
+        FilterPreset("Batch", FilterConfig(include_keywords=["batch"])),
     ]
 
-    def search_engines(self) -> list[Callable[[str], list[dict]]]:
-        """Return a list of engine search methods to run concurrently."""
-        return [self._search_apibay, self._search_solidtorrents, self._search_nyaa]
+    def _init_engines(self) -> list[SearchEngine]:
+        """Nyaa enabled by default; Apibay and SolidTorrents available but off."""
+        return [
+            SearchEngine("Nyaa", "🍙", self._search_nyaa, enabled=True),
+            SearchEngine("Apibay", "🏴‍☠️", self._search_apibay, enabled=False),
+            SearchEngine("SolidTorrents", "🔗", self._search_solidtorrents, enabled=False),
+        ]
 
     def _parse_nyaa_size(self, size_str: str) -> int:
         """Parse Nyaa size string (e.g. '1.5 GiB') into bytes."""

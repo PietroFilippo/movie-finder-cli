@@ -58,21 +58,51 @@ def get_query_with_shortcut(prompt_str: str) -> str | None:
 
 
 def filter_menu(provider) -> None:
-    """Show the currently available presets and allow toggling them."""
-    if not provider.presets:
-        console.print("[warning] No presets available for this provider.[/warning]")
+    """Show engine toggles and filter presets in a single menu."""
+    has_engines = hasattr(provider, 'engines') and provider.engines
+    has_presets = bool(provider.presets)
+
+    if not has_engines and not has_presets:
+        console.print("[warning] No filters available for this provider.[/warning]")
         return
 
-    # Build toggle items + action buttons
     items = []
-    for p in provider.presets:
-        items.append(SelectItem(
-            label=p.name,
-            value=p,
-            toggled=p in provider.active_presets,
-        ))
 
-    # Action buttons
+    # --- Section 1: Search Engines ---
+    engine_indices = []
+    if has_engines:
+        items.append(SelectItem(
+            label="─── Search Engines ───",
+            value="section_header",
+            enabled=False,
+            is_action=True,
+        ))
+        for engine in provider.engines:
+            items.append(SelectItem(
+                label=f"{engine.icon} {engine.name}",
+                value=("engine", engine),
+                toggled=engine.enabled,
+            ))
+            engine_indices.append(len(items) - 1)
+
+    # --- Section 2: Filter Presets ---
+    preset_indices = []
+    if has_presets:
+        items.append(SelectItem(
+            label="─── Filter Presets ───",
+            value="section_header",
+            enabled=False,
+            is_action=True,
+        ))
+        for p in provider.presets:
+            items.append(SelectItem(
+                label=p.name,
+                value=("preset", p),
+                toggled=p in provider.active_presets,
+            ))
+            preset_indices.append(len(items) - 1)
+
+    # --- Action buttons ---
     items.append(SelectItem(label="Clear all", value="clear", is_action=True))
     items.append(SelectItem(label="✅ Confirm", value="confirm", is_action=True))
     items.append(SelectItem(label="↩ Go Back", value="back", is_action=True))
@@ -80,17 +110,21 @@ def filter_menu(provider) -> None:
     def handle_filter_action(idx, items):
         if items[idx].value == "clear":
             for it in items:
-                if not it.is_action:
+                if not it.is_action and it.value != "section_header":
                     it.toggled = False
             return True  # Stay in menu
         return False  # Exit for Confirm / Go Back
 
+    # Start cursor on first enabled item (skip header)
+    start = 1 if has_engines else 0
+
     result_idx = arrow_select(
         items,
-        title=f"Filter Presets — {provider.label}",
+        title=f"Filters — {provider.label}",
         multi=True,
         banner=_make_banner_panel(),
         on_action=handle_filter_action,
+        start_index=start,
     )
 
     if result_idx is None:
@@ -99,10 +133,19 @@ def filter_menu(provider) -> None:
     action = items[result_idx].value
 
     if action == "confirm":
+        # Apply engine toggles
+        for idx in engine_indices:
+            item = items[idx]
+            _type, engine = item.value
+            engine.enabled = item.toggled
+
+        # Apply preset toggles
         provider.active_presets.clear()
-        for it in items:
-            if not it.is_action and it.toggled:
-                provider.active_presets.append(it.value)
+        for idx in preset_indices:
+            item = items[idx]
+            if item.toggled:
+                _type, preset = item.value
+                provider.active_presets.append(preset)
     # "back" — just return
 
 

@@ -1,11 +1,9 @@
 """Movie torrent provider — searches video/movie categories."""
 
-from typing import Callable
-
 import requests
 
 from filters import FilterConfig, FilterPreset
-from providers.base import BaseProvider
+from providers.base import BaseProvider, SearchEngine
 
 
 class MovieProvider(BaseProvider):
@@ -15,13 +13,22 @@ class MovieProvider(BaseProvider):
     solidtorrents_category = "Movie"
 
     presets = [
-        FilterPreset("HD Only", FilterConfig(quality=["1080p", "bluray"])),
-        FilterPreset("Small Size", FilterConfig(quality=["x265", "hevc"])),
+        FilterPreset("720p", FilterConfig(quality=["720p"])),
+        FilterPreset("1080p", FilterConfig(quality=["1080p"])),
+        FilterPreset("4K / 2160p", FilterConfig(quality=["2160p", "4k"])),
+        FilterPreset("With Subtitles", FilterConfig(include_keywords=["sub", "srt"])),
+        FilterPreset("x265 / HEVC", FilterConfig(include_keywords=["x265", "hevc"])),
+        FilterPreset("HDR", FilterConfig(include_keywords=["hdr", "dolby vision", "dv"])),
+        FilterPreset("Remux", FilterConfig(include_keywords=["remux"])),
     ]
 
-    def search_engines(self) -> list[Callable[[str], list[dict]]]:
-        """Return a list of engine search methods to run concurrently."""
-        return [self._search_apibay, self._search_solidtorrents, self._search_yts]
+    def _init_engines(self) -> list[SearchEngine]:
+        """Movies use Apibay, SolidTorrents, and YTS."""
+        return [
+            SearchEngine("Apibay", "🏴‍☠️", self._search_apibay, enabled=True),
+            SearchEngine("SolidTorrents", "🔗", self._search_solidtorrents, enabled=True),
+            SearchEngine("YTS", "🎥", self._search_yts, enabled=True),
+        ]
 
     def _search_yts(self, query: str) -> list[dict]:
         """Search YTS API for the query."""
