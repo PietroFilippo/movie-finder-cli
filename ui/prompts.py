@@ -266,8 +266,15 @@ def provider_select_prompt() -> object | None:
     """Prompt the user to select a torrent provider. Returns the provider object or None if cancelled.
 
     Press F on a highlighted provider to configure its filters without leaving the menu.
+    A "Network exposure info" action re-opens the security warning on demand.
     """
-    items = [SelectItem(label=p.label, value=p) for p in PROVIDERS]
+    provider_items = [SelectItem(label=p.label, value=p) for p in PROVIDERS]
+    info_item = SelectItem(
+        label="🔒 Network exposure info",
+        value="__network_info__",
+        is_action=True,
+    )
+    items = provider_items + [info_item]
     start = 0
 
     while True:
@@ -290,9 +297,18 @@ def provider_select_prompt() -> object | None:
         if isinstance(result, tuple) and result[0] == "hotkey":
             _, action, cursor = result
             if action == "filter":
-                filter_menu(items[cursor].value)
+                target = items[cursor].value
+                # Skip filter hotkey for the network-info action item
+                if target != "__network_info__":
+                    filter_menu(target)
                 start = cursor
                 continue
+
+        if items[result].value == "__network_info__":
+            from security import show_security_warning
+            show_security_warning(force=True)
+            start = result
+            continue
 
         return items[result].value
 

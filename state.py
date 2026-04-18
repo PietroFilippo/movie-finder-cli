@@ -1,4 +1,4 @@
-"""Persist engine toggles and active filter presets across runs."""
+"""Persist engine toggles, active filter presets, and misc settings across runs."""
 
 import json
 import os
@@ -6,16 +6,27 @@ import os
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_state.json")
 
 
-def load_state(providers) -> None:
-    """Apply saved engine/preset selections onto the given provider instances in place."""
+def _read_state() -> dict:
     if not os.path.exists(STATE_PATH):
-        return
+        return {}
     try:
         with open(STATE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            return json.load(f)
     except (OSError, json.JSONDecodeError):
-        return
+        return {}
 
+
+def _write_state(data: dict) -> None:
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def load_state(providers) -> None:
+    """Apply saved engine/preset selections onto the given provider instances in place."""
+    data = _read_state()
     provider_states = data.get("providers", {})
     for provider in providers:
         pstate = provider_states.get(provider.name)
@@ -34,15 +45,25 @@ def load_state(providers) -> None:
 
 
 def save_state(providers) -> None:
-    """Write current engine/preset selections to disk. Silent on failure."""
-    data = {"providers": {}}
-    for provider in providers:
-        data["providers"][provider.name] = {
-            "engines": {e.name: e.enabled for e in provider.engines},
-            "active_presets": [p.name for p in provider.active_presets],
+    """Write current engine/preset selections to disk, preserving other top-level keys."""
+    data = _read_state()
+    data["providers"] = {
+        p.name: {
+            "engines": {e.name: e.enabled for e in p.engines},
+            "active_presets": [pr.name for pr in p.active_presets],
         }
-    try:
-        with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except OSError:
-        pass
+        for p in providers
+    }
+    _write_state(data)
+
+
+def load_setting(key: str, default=None):
+    """Read a value from the `settings` subtree of the state file."""
+    return _read_state().get("settings", {}).get(key, default)
+
+
+def save_setting(key: str, value) -> None:
+    """Write a value into the `settings` subtree of the state file, preserving other keys."""
+    data = _read_state()
+    data.setdefault("settings", {})[key] = value
+    _write_state(data)

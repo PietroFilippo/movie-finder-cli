@@ -8,6 +8,9 @@ from rich.panel import Panel
 from rich.text import Text
 
 from constants import console
+from state import load_setting, save_setting
+
+DISMISSED_KEY = "security_warning_dismissed"
 
 # Substring tokens suggesting a VPN/proxy in the ipinfo `org` field.
 VPN_ORG_HINTS = (
@@ -44,16 +47,24 @@ def _looks_like_vpn(org: str) -> bool:
     return any(token in org_l for token in VPN_ORG_HINTS)
 
 
-def show_security_warning() -> bool:
+def show_security_warning(force: bool = False) -> bool:
     """Show network-exposure panel and wait for acknowledgement.
 
-    Returns False if the user aborts with Esc/Ctrl-C, True on Enter
-    or when bypassed via the TORRENT_SKIP_WARNING env var.
-    """
-    if os.environ.get("TORRENT_SKIP_WARNING"):
-        return True
+    Returns False only if the user aborts with Esc/Ctrl-C. Returns True on
+    Enter, on `D` (permanently dismiss), when bypassed via the
+    TORRENT_SKIP_WARNING env var, or when previously dismissed.
 
-    info = _fetch_network_info()
+    Pass force=True to bypass the env var and the dismissed flag (used by
+    the provider selector's "Network exposure info" action).
+    """
+    if not force:
+        if os.environ.get("TORRENT_SKIP_WARNING"):
+            return True
+        if load_setting(DISMISSED_KEY, False):
+            return True
+
+    with console.status("[bold cyan]Fetching network info...[/bold cyan]", spinner="dots"):
+        info = _fetch_network_info()
 
     body = Text()
     if info:
@@ -115,7 +126,10 @@ def show_security_warning() -> bool:
     )
     body.append("\n")
     body.append(" Enter ", style="bold yellow on grey23")
-    body.append(" acknowledge & continue     ", style="dim")
+    body.append(" continue     ", style="dim")
+    if not force:
+        body.append(" D ", style="bold yellow on grey23")
+        body.append(" don't show again     ", style="dim")
     body.append(" Esc ", style="bold yellow on grey23")
     body.append(" abort", style="dim")
 
@@ -130,6 +144,10 @@ def show_security_warning() -> bool:
     while True:
         key = readchar.readkey()
         if key in (readchar.key.ENTER, readchar.key.CR, readchar.key.LF):
+            return True
+        if not force and key in ("d", "D"):
+            save_setting(DISMISSED_KEY, True)
+            console.print("[dim]Warning dismissed. Re-open via the provider menu.[/dim]")
             return True
         if key == readchar.key.ESC:
             return False
