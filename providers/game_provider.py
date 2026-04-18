@@ -18,4 +18,8 @@ class GameProvider(BaseProvider):
         FilterPreset("PC Only", FilterConfig(exclude_keywords=["rom", "nds", "gba", "3ds", "nsp", "xci", "pkg", "wbfs", "wii", "ps3", "ps4", "xbox"])),
         FilterPreset("GOG", FilterConfig(include_keywords=["gog"])),
         FilterPreset("Online Fix", FilterConfig(include_keywords=["online-fix", "onlinefix"])),
+        FilterPreset("Trusted Uploaders", FilterConfig(include_keywords=[
+            "fitgirl", "dodi", "kaos", "empress", "razor1911",
+            "plaza", "codex", "rune", "tenoke", "skidrow",
+        ])),
     ]

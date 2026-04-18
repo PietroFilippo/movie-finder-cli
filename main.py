@@ -18,6 +18,7 @@ import readchar
 from downloader import download_with_webtorrent, download_with_peerflix, open_magnet, stream_with_peerflix, stream_with_webtorrent
 from filters import FilterConfig
 from providers import PROVIDERS, get_provider
+from security import show_security_warning
 from state import load_state
 from ui.prompts import clear_screen, download_method_prompt, filter_menu, get_query_with_shortcut, print_banner, provider_select_prompt, search_again_prompt
 from ui.table import interactive_select
@@ -32,7 +33,13 @@ def main() -> None:
     parser.add_argument("-t", "--type", type=str, choices=["movie", "game", "anime"], help="Search type (default: movie if used with -q)")
     parser.add_argument("-f", "--filter", action="append", help="Include keyword in results")
     parser.add_argument("-x", "--exclude", action="append", help="Exclude keyword from results")
+    parser.add_argument("-y", "--skip-warning", action="store_true", help="Skip network exposure warning")
     args = parser.parse_args()
+
+    if not args.skip_warning:
+        if not show_security_warning():
+            console.print("[info]Aborted.[/info]")
+            return
 
     query = args.query
     initial_provider = None

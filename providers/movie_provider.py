@@ -20,6 +20,10 @@ class MovieProvider(BaseProvider):
         FilterPreset("x265 / HEVC", FilterConfig(include_keywords=["x265", "hevc"])),
         FilterPreset("HDR", FilterConfig(include_keywords=["hdr", "dolby vision", "dv"])),
         FilterPreset("Remux", FilterConfig(include_keywords=["remux"])),
+        FilterPreset("Trusted Uploaders", FilterConfig(include_keywords=[
+            "yify", "yts", "rarbg", "fgt", "sparks", "evo",
+            "qxr", "tgx", "anoxmous", "etrg", "mkvcage", "galaxy",
+        ])),
     ]
 
     def _init_engines(self) -> list[SearchEngine]:

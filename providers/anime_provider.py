@@ -21,6 +21,10 @@ class AnimeProvider(BaseProvider):
         FilterPreset("Dual Audio", FilterConfig(include_keywords=["dual audio"])),
         FilterPreset("Subbed", FilterConfig(include_keywords=["sub"])),
         FilterPreset("Batch", FilterConfig(include_keywords=["batch"])),
+        FilterPreset("Trusted Uploaders", FilterConfig(include_keywords=[
+            "subsplease", "erai-raws", "erai", "horriblesubs",
+            "judas", "toonshub", "commie", "mtbb",
+        ])),
     ]
 
     def _init_engines(self) -> list[SearchEngine]:
