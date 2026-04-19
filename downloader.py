@@ -149,16 +149,18 @@ def has_aria2() -> bool:
     return shutil.which("aria2c") is not None
 
 
-def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = None) -> None:
+def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = None) -> bool:
     """Download torrent content using aria2c.
 
     Supports multi-file selection natively via --select-file=1,3,5-7 in a
-    single process. select_indexes are 1-based (aria2's convention).
+    single process. select_indexes are 1-based (aria2's convention). Returns
+    True on normal completion; False on cancellation or failure so callers
+    can return the user to the download-method menu.
     """
     aria_path = shutil.which("aria2c")
     if not aria_path:
         console.print("[error] aria2c not found. Install from https://aria2.github.io/[/error]\n")
-        return
+        return False
 
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
@@ -184,26 +186,30 @@ def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = Non
         if result.returncode == 0:
             console.print("[success] Download complete![/success]")
             console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
-        else:
-            console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
+            return True
+        console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
+        return False
     except KeyboardInterrupt:
         console.print("\n[warning] Download cancelled.[/warning]\n")
+        return False
     except FileNotFoundError:
         console.print("[error] aria2c not found. Install from https://aria2.github.io/[/error]\n")
+        return False
 
 
-def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None = None) -> None:
+def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None = None) -> bool:
     """Download torrent content directly using webtorrent-cli.
 
     Runs webtorrent in the terminal directly (no stdout piping) so its
     built-in progress UI renders natively. webtorrent-cli's --select takes a
     single file index (0-based); multi-file selection is handled by looping
-    over the provided 1-based indexes.
+    over the provided 1-based indexes. Returns True on normal completion;
+    False on cancellation or failure.
     """
     wt_path = shutil.which("webtorrent")
     if not wt_path:
         console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
-        return
+        return False
 
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
@@ -226,30 +232,34 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
                 cmd.extend(["--select", str(idx - 1)])  # webtorrent is 0-based
             result = subprocess.run(cmd)
             if result.returncode != 0:
-                console.print(f"[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
-                break
+                console.print(f"\n[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
+                return False
 
         console.print()
         console.print("[success] Download complete![/success]")
         console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        return True
 
     except KeyboardInterrupt:
         console.print("\n[warning] Download cancelled.[/warning]\n")
+        return False
     except FileNotFoundError:
         console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
+        return False
 
 
-def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = None) -> None:
+def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = None) -> bool:
     """Download torrent content directly using peerflix.
 
     peerflix streams/downloads a single file per process; multi-file selection
     is handled by looping over the provided 1-based indexes. Use aria2c for a
-    single-process multi-file download.
+    single-process multi-file download. Returns True on normal completion;
+    False on cancellation or failure.
     """
     pf_path = shutil.which("peerflix")
     if not pf_path:
         console.print("[error] peerflix not found. Install with: npm install -g peerflix[/error]\n")
-        return
+        return False
 
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
     console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
@@ -272,17 +282,20 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
                 cmd.extend(["-i", str(idx - 1)])  # peerflix is 0-based
             result = subprocess.run(cmd)
             if result.returncode != 0:
-                console.print(f"[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
-                break
+                console.print(f"\n[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
+                return False
 
         console.print()
         console.print("[success] Download complete![/success]")
         console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        return True
 
     except KeyboardInterrupt:
         console.print("\n[warning] Download cancelled.[/warning]\n")
+        return False
     except FileNotFoundError:
         console.print("[error] peerflix not found. Install with: npm install -g peerflix[/error]\n")
+        return False
 
 
 def _run_stream(

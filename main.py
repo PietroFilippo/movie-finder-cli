@@ -206,21 +206,27 @@ def main() -> None:
                     continue
                 elif method == "aria":
                     clear_screen()
-                    download_with_aria2(magnet, select_indexes=selected_files)
+                    ok = download_with_aria2(magnet, select_indexes=selected_files)
                     console.print("\n[dim]Press any key to continue...[/dim]")
                     readchar.readkey()
+                    if not ok:
+                        continue  # back to download-method menu
                     break
                 elif method == "p":
                     clear_screen()
-                    download_with_peerflix(magnet, select_indexes=selected_files)
+                    ok = download_with_peerflix(magnet, select_indexes=selected_files)
                     console.print("\n[dim]Press any key to continue...[/dim]")
                     readchar.readkey()
+                    if not ok:
+                        continue
                     break
                 elif method == "d":
                     clear_screen()
-                    download_with_webtorrent(magnet, select_indexes=selected_files)
+                    ok = download_with_webtorrent(magnet, select_indexes=selected_files)
                     console.print("\n[dim]Press any key to continue...[/dim]")
                     readchar.readkey()
+                    if not ok:
+                        continue
                     break
                 elif method == "s":
                     from subtitles import download_subtitles
