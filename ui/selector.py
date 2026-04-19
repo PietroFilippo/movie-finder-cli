@@ -20,6 +20,7 @@ class SelectItem:
     toggled: bool = False
     hint: str = ""        # Dim subtext shown next to the label
     is_action: bool = False  # Action buttons: Enter returns instead of toggling
+    description: str = ""  # Dim context-help shown above the footer when cursor on this item
 
 
 def _compute_window(n: int, cursor: int, max_visible: int) -> tuple[int, int]:
@@ -67,8 +68,8 @@ def _build_panel(
     main_len = main_end - main_start
 
     # Reserve chrome: banner (~4) + panel borders (4) + padding (2) + footer (2)
-    # + action rows at top/bottom of the list.
-    chrome = 12 + main_start + (n - main_end)
+    # + description line (2) + action rows at top/bottom of the list.
+    chrome = 14 + main_start + (n - main_end)
     max_visible = max(6, console.size.height - chrome)
 
     win_start_rel, win_end_rel = _compute_window(main_len, cursor - main_start, max_visible)
@@ -144,6 +145,14 @@ def _build_panel(
         if in_main and i == win_end - 1 and win_end < main_end:
             body.append(f"    … {main_end - win_end} more below\n", style="dim italic")
 
+    # Context-help for current cursor item. Always renders (even blank) so
+    # the footer doesn't jump when moving between described/undescribed rows.
+    cur_item = items[cursor] if 0 <= cursor < len(items) else None
+    desc = cur_item.description if cur_item else ""
+    body.append("\n")
+    body.append_text(Text.from_markup(f" {desc}" if desc else " ", style="dim italic"))
+    body.append("\n")
+
     # Footer / help text
     if not footer:
         if multi:
@@ -151,7 +160,6 @@ def _build_panel(
         else:
             footer = "↑/↓ navigate  •  Enter select  •  Esc cancel"
 
-    body.append("\n")
     body.append_text(Text.from_markup(f" {footer}", style="dim"))
 
     return Panel(

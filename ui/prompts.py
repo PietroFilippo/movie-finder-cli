@@ -288,6 +288,7 @@ def download_method_prompt(
             is_action=True,
             hint=("requires aria2c to fetch file list" if not aria_available else ""),
             enabled=aria_available,
+            description="Pick files from the torrent — downstream downloads grab only those",
         ))
 
     # --- Stream to VLC ---
@@ -301,6 +302,7 @@ def download_method_prompt(
             else f"plays {n_sel} episode(s) sequentially" if has_selection
             else "requires VLC installed"
         ),
+        description="Watch while downloading via VLC (peerflix) — good streaming default",
     ))
     items.append(SelectItem(
         label="▶  webtorrent",
@@ -311,6 +313,7 @@ def download_method_prompt(
             else f"plays {n_sel} episode(s) sequentially" if has_selection
             else "requires VLC installed"
         ),
+        description="Stream via webtorrent — try if peerflix stalls or finds no peers",
     ))
 
     # --- Download ---
@@ -323,6 +326,7 @@ def download_method_prompt(
             "(not installed — https://aria2.github.io/)" if not aria_available
             else "fastest, multi-file in one process, won't seed"
         ),
+        description="Best downloader — native multi-file, resumes, fastest for batches",
     ))
     items.append(SelectItem(
         label="⬇  peerflix",
@@ -333,6 +337,7 @@ def download_method_prompt(
             else f"{n_sel} sequential session(s), won't seed" if has_selection
             else "slower, won't seed"
         ),
+        description="Plain download via peerflix — slower than aria2, no seeding",
     ))
     items.append(SelectItem(
         label="⬇  webtorrent",
@@ -343,6 +348,7 @@ def download_method_prompt(
             else f"{n_sel} sequential session(s), won't seed" if has_selection
             else "slower, won't seed"
         ),
+        description="Plain download via webtorrent — one file per run, no seeding",
     ))
 
     # --- Other ---
@@ -351,20 +357,28 @@ def download_method_prompt(
         label=f"🧲 Open in {client_name}",
         value="t",
         hint=("⚠  uncheck unwanted files in the client's dialog" if has_selection else ""),
+        description="Hand magnet to your desktop client — use to seed or manage in a GUI",
     ))
     items.append(SelectItem(
         label="📋 Copy magnet link",
         value="l",
         is_action=True,
+        description="Copies the magnet URI to your clipboard",
     ))
     if show_subtitles:
         items.append(SelectItem(
             label="📝 Search & download subtitles",
             value="s",
+            description="Find a matching .srt via OpenSubtitles and save it next to the video",
         ))
 
     # --- Trailing actions ---
-    items.append(SelectItem(label="↩  Go back to results", value="back", is_action=True))
+    items.append(SelectItem(
+        label="↩  Go back to results",
+        value="back",
+        is_action=True,
+        description="Return to the search results list",
+    ))
     items.append(SelectItem(label="✕  Cancel", value=None, is_action=True))
 
     def handle_download_action(idx, items):
