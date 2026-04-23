@@ -436,13 +436,22 @@ def _webtorrent_vlc_url(
     info_hash = _extract_infohash(magnet_link)
     if not info_hash:
         return None
-    name = torrent_name or _magnet_dn(magnet_link)
+        
+    if not is_multi_file and file_path:
+        # For single files, webtorrent's torrent.name IS the full filename
+        # (e.g. 'Movie.mkv' instead of just 'Movie'). webtorrent serves it at:
+        # /webtorrent/<infohash>/<filename>
+        name = file_path
+    else:
+        name = torrent_name or _magnet_dn(magnet_link)
+        
     if not name:
         return None
-    encoded_torrent = urllib.parse.quote(name, safe="[]()~")
+        
+    encoded_torrent = urllib.parse.quote(name, safe="()~")
     base = f"http://127.0.0.1:{port}/webtorrent/{info_hash}/{encoded_torrent}"
     if is_multi_file and file_path:
-        encoded_file = urllib.parse.quote(file_path, safe="/[]()~")
+        encoded_file = urllib.parse.quote(file_path, safe="/()~")
         return f"{base}/{encoded_file}"
     return base
 
@@ -559,9 +568,26 @@ def stream_with_webtorrent(
         console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
         return
 
-    targets: list[int | None] = list(select_indexes) if select_indexes else [None]
-    multi = len(targets) > 1
+    from torrent_meta import fetch_file_list
+    
+    if files is None:
+        console.print("[info]Fetching metadata to resolve exact stream URL...[/info]")
+        with console.status("[bold cyan]Fetching metadata...", spinner="dots"):
+            files = fetch_file_list(magnet_link)
+            
+    targets: list[int | None] = list(select_indexes) if select_indexes else []
     file_list = files.files if files is not None else []
+    
+    if not targets and file_list:
+        # If no specific files were selected, webtorrent defaults to the largest file.
+        # explicitly resolve that file here so the URL reconstruction matches it
+        largest_file = max(file_list, key=lambda f: f.size_bytes)
+        targets = [largest_file.index]
+    elif not targets:
+        # Fallback if there are no metadata
+        targets = [None]
+        
+    multi = len(targets) > 1
     name_by_idx = {f.index: f.name for f in file_list}
     is_multi_file = len(file_list) > 1
     torrent_name = files.name if files is not None else None
@@ -570,10 +596,17 @@ def stream_with_webtorrent(
         ep_idx = 0
         while 0 <= ep_idx < len(targets):
             idx = targets[ep_idx]
-            file_path = name_by_idx.get(idx) if idx is not None else None
+            
+            if idx is not None:
+                file_path = name_by_idx.get(idx)
+            elif not is_multi_file and file_list:
+                file_path = file_list[0].name
+            else:
+                file_path = None
+                
             vlc_url = _webtorrent_vlc_url(magnet_link, torrent_name, file_path, is_multi_file)
 
-            # No scroll region — webtorrent clears through them.
+            # No scroll region- webtorrent clears through them.
             # Episode info goes in the terminal title bar instead.
             _print_stream_header(ep_idx, len(targets), idx, multi, vlc_url, use_scroll_region=False)
 

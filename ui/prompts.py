@@ -584,24 +584,49 @@ def provider_select_prompt() -> object | None:
         return items[result].value
 
 
-def search_again_prompt() -> str | None:
+def search_again_prompt() -> str | tuple | None:
     """Prompt the user for what to do next after a download.
 
-    Returns 'search', 'provider', or None (exit).
+    Returns:
+        - ``'search'`` to search again with the same provider.
+        - ``'provider'`` to change provider.
+        - ``("history", query, provider_obj)`` when the user picks a history entry.
+        - ``None`` (exit).
     """
     items = [
         SelectItem(label="🔍 Search Again", value="search"),
         SelectItem(label="🔄 Change Provider", value="provider"),
+        SelectItem(label="📜 Search History", value="history"),
         SelectItem(label="👋 Exit", value="exit"),
     ]
 
-    idx = arrow_select(
-        items,
-        title="What's Next?",
-        banner=_make_banner_panel(),
-    )
+    start = 0
+    while True:
+        idx = arrow_select(
+            items,
+            title="What's Next?",
+            banner=_make_banner_panel(),
+            start_index=start,
+        )
 
-    if idx is None:
-        return None
+        if idx is None:
+            return None
 
-    return items[idx].value
+        selected = items[idx].value
+
+        if selected == "history":
+            from ui.history import history_select_prompt
+            pick = history_select_prompt()
+            if pick:
+                query, prov_name = pick
+                from providers import get_provider
+                prov = get_provider(prov_name)
+                if prov:
+                    return ("history", query, prov)
+            start = idx
+            continue
+
+        if selected == "exit":
+            return None
+
+        return selected

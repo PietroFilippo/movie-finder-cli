@@ -273,15 +273,18 @@ def main() -> None:
 
         # What's next?
         choice = search_again_prompt()
-        if choice == "search":
+        if isinstance(choice, tuple) and choice[0] == "history":
+            _, query, current_provider = choice
             clear_screen()
+        elif choice == "search":
+            clear_screen()
+            query = None
         elif choice == "provider":
             current_provider = None
+            query = None
         else:
             console.print("[info]Goodbye![/info]")
             break
-
-        query = None
 
 if __name__ == "__main__":
     try:
