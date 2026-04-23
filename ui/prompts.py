@@ -508,15 +508,34 @@ def provider_select_prompt() -> object | None:
         - ``None`` if cancelled.
     """
     provider_items = [SelectItem(label=p.label, value=p) for p in PROVIDERS]
+    separator = SelectItem(
+        label="───────────────────",
+        value="section_header",
+        enabled=False,
+        is_action=True,
+    )
     info_item = SelectItem(
         label="🔒 Network exposure info",
         value="__network_info__",
         is_action=True,
     )
-    items = provider_items + [info_item]
+    items = provider_items + [separator, info_item]
     start = 0
 
+    # Closure flag: set by key_action when F is pressed on a provider
+    _filter_request = {"target": None}
+
+    def _handle_f(cursor, items_list):
+        target = items_list[cursor].value
+        if isinstance(target, str):
+            # Non-provider row (separator, network info) — silently ignore
+            return True  # stay in menu, no flicker
+        _filter_request["target"] = target
+        return cursor  # exit menu to open filter_menu outside
+
     while True:
+        _filter_request["target"] = None
+
         result = arrow_select(
             items,
             title="Select Provider",
@@ -528,22 +547,23 @@ def provider_select_prompt() -> object | None:
             ),
             banner=_make_banner_panel(),
             start_index=start,
-            hotkeys={"F": "filter", "f": "filter", "H": "history", "h": "history"},
+            hotkeys={"H": "history", "h": "history"},
+            key_actions={"F": _handle_f, "f": _handle_f},
         )
 
         if result is None:
             return None
 
+        # F key pressed on a provider — open its filter menu
+        if _filter_request["target"] is not None:
+            filter_menu(_filter_request["target"])
+            start = result  # result is the cursor index returned by key_action
+            continue
+
+        # H key — open history
         if isinstance(result, tuple) and result[0] == "hotkey":
             _, action, cursor = result
-            if action == "filter":
-                target = items[cursor].value
-                # Skip filter hotkey for the network-info action item
-                if target != "__network_info__":
-                    filter_menu(target)
-                start = cursor
-                continue
-            elif action == "history":
+            if action == "history":
                 from ui.history import history_select_prompt
                 pick = history_select_prompt()
                 if pick:

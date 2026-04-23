@@ -248,6 +248,11 @@ def _render(banner: object, panel: Panel) -> None:
     sys.stdout.flush()
 
 
+def _resolve(val):
+    """If *val* is callable, call it; otherwise return it unchanged."""
+    return val() if callable(val) else val
+
+
 def arrow_select(
     items: list[SelectItem],
     title: str = "Select",
@@ -263,6 +268,10 @@ def arrow_select(
 
     Uses the terminal's alternate screen buffer for a clean, flicker-free
     experience. The original screen content is restored when done.
+
+    *title* and *footer* may be strings **or callables** returning a string.
+    Callables are re-evaluated on every render, allowing dynamic content
+    (e.g. filter labels) without leaving the alt-screen.
 
     Args:
         items: List of SelectItem to display.
@@ -332,7 +341,7 @@ def arrow_select(
             if need_redraw:
                 state["tick"] = new_tick
                 last_rendered_tick = new_tick
-                _render(banner, _build_panel(items, state["cursor"], title, multi, footer, tick=new_tick))
+                _render(banner, _build_panel(items, state["cursor"], _resolve(title), multi, _resolve(footer), tick=new_tick))
 
     # Enter alternate screen buffer + hide cursor + clear it
     sys.stdout.write("\033[?1049h\033[?25l\033[2J\033[H")
@@ -343,7 +352,7 @@ def arrow_select(
 
     try:
         # Initial render
-        _render(banner, _build_panel(items, cursor, title, multi, footer, tick=0))
+        _render(banner, _build_panel(items, cursor, _resolve(title), multi, _resolve(footer), tick=0))
 
         while True:
             key = readchar.readkey()
@@ -397,7 +406,7 @@ def arrow_select(
                 state["cursor_changed_at"] = time.monotonic()
 
             state["cursor"] = cursor
-            _render(banner, _build_panel(items, cursor, title, multi, footer, tick=state["tick"]))
+            _render(banner, _build_panel(items, cursor, _resolve(title), multi, _resolve(footer), tick=state["tick"]))
 
     finally:
         stop_event.set()

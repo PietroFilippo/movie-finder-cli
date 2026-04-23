@@ -104,36 +104,33 @@ def history_select_prompt() -> tuple[str, str] | None:
     Returns ``(query, provider_name)`` when the user picks an entry,
     or ``None`` on cancel / empty history / go-back.
     """
-    # Filter state (persists across hotkey cycles within a single menu session)
-    prov_idx = 0   # index into _PROVIDER_OPTIONS
-    date_idx = 0   # index into _DATE_OPTIONS
-    sort_idx = 0   # index into _SORT_OPTIONS
+    # Mutable filter state — shared by key_action callbacks and callable title/footer
+    fstate = {
+        "prov_idx": 0,   # index into _PROVIDER_OPTIONS
+        "date_idx": 0,   # index into _DATE_OPTIONS
+        "sort_idx": 0,   # index into _SORT_OPTIONS
+    }
 
-    while True:
-        history = load_history()
-        prov_filter = _PROVIDER_OPTIONS[prov_idx]
-        date_filter = _DATE_OPTIONS[date_idx]
-        sort_order = _SORT_OPTIONS[sort_idx]
+    history = load_history()
 
-        # Apply filters
+    # --- helpers to build / rebuild the items list in place ---
+
+    def _current_filters():
+        return (
+            _PROVIDER_OPTIONS[fstate["prov_idx"]],
+            _DATE_OPTIONS[fstate["date_idx"]],
+            _SORT_OPTIONS[fstate["sort_idx"]],
+        )
+
+    def _rebuild(items: list[SelectItem]) -> None:
+        """Clear *items* and repopulate from current history + active filters."""
+        prov_filter, date_filter, sort_order = _current_filters()
+
         filtered = _filter_by_provider(history, prov_filter)
         filtered = _filter_by_date(filtered, date_filter)
         filtered = _sort_entries(filtered, sort_order)
 
-        # Build title with active filters
-        filter_tags = []
-        if prov_filter != "All":
-            filter_tags.append(f"{_provider_icon(prov_filter)} {prov_filter}")
-        if date_filter != "All time":
-            filter_tags.append(date_filter)
-        if sort_order != "Newest first":
-            filter_tags.append(sort_order)
-        title = "Search History"
-        if filter_tags:
-            title += " — " + "  •  ".join(filter_tags)
-
-        # Build items
-        items: list[SelectItem] = []
+        items.clear()
 
         if not history:
             items.append(SelectItem(
@@ -164,56 +161,83 @@ def history_select_prompt() -> tuple[str, str] | None:
 
         items.append(SelectItem(label="↩  Go Back", value="back", is_action=True))
 
-        # Footer with filter hotkey hints
-        footer = (
+    # --- dynamic title / footer (callables resolved each render) ---
+
+    def _title():
+        prov_filter, date_filter, sort_order = _current_filters()
+        tags = []
+        if prov_filter != "All":
+            tags.append(f"{_provider_icon(prov_filter)} {prov_filter}")
+        if date_filter != "All time":
+            tags.append(date_filter)
+        if sort_order != "Newest first":
+            tags.append(sort_order)
+        t = "Search History"
+        if tags:
+            t += " — " + "  •  ".join(tags)
+        return t
+
+    def _footer():
+        prov_filter, date_filter, sort_order = _current_filters()
+        return (
             "↑/↓ navigate  •  Enter re-run  •  Esc back\n"
             f" [bold yellow]P[/bold yellow] provider: [cyan]{prov_filter}[/cyan]  •  "
             f"[bold yellow]D[/bold yellow] date: [cyan]{date_filter}[/cyan]  •  "
             f"[bold yellow]S[/bold yellow] sort: [cyan]{sort_order}[/cyan]"
         )
 
-        def on_action(idx, items_list):
-            if items_list[idx].value == "clear":
-                clear_history()
-                to_remove = [i for i, it in enumerate(items_list) if not it.is_action]
-                for i in reversed(to_remove):
-                    items_list.pop(i)
-                for it in items_list:
-                    if it.value == "clear":
-                        it.hint = "✅ Cleared!"
-                        it.enabled = False
-                return True
-            return False
+    # --- key_action callbacks (cycle filter + rebuild in-place) ---
 
-        result = arrow_select(
-            items,
-            title=title,
-            banner=_make_banner_panel(),
-            on_action=on_action,
-            footer=footer,
-            hotkeys={
-                "P": "provider", "p": "provider",
-                "D": "date", "d": "date",
-                "S": "sort", "s": "sort",
-            },
-        )
+    def _cycle(key_name: str, options_len: int):
+        """Return a key_action callback that cycles fstate[key_name]."""
+        def handler(cursor, items_list):
+            fstate[key_name] = (fstate[key_name] + 1) % options_len
+            _rebuild(items_list)
+            # Jump cursor to first enabled item
+            for i, it in enumerate(items_list):
+                if it.enabled:
+                    return ("jump", i)
+            return True
+        return handler
 
-        # Handle hotkey cycling — rebuild the menu with the next filter value
-        if isinstance(result, tuple) and result[0] == "hotkey":
-            _, action, _ = result
-            if action == "provider":
-                prov_idx = (prov_idx + 1) % len(_PROVIDER_OPTIONS)
-            elif action == "date":
-                date_idx = (date_idx + 1) % len(_DATE_OPTIONS)
-            elif action == "sort":
-                sort_idx = (sort_idx + 1) % len(_SORT_OPTIONS)
-            continue
+    # --- on_action for Clear History ---
 
-        if result is None:
-            return None
+    def on_action(idx, items_list):
+        nonlocal history
+        if items_list[idx].value == "clear":
+            clear_history()
+            history = []
+            _rebuild(items_list)
+            return True
+        return False
 
-        selected = items[result].value
-        if isinstance(selected, dict):
-            return (selected["query"], selected["provider"])
+    # --- build initial items and run ---
 
+    items: list[SelectItem] = []
+    _rebuild(items)
+
+    result = arrow_select(
+        items,
+        title=_title,
+        banner=_make_banner_panel(),
+        on_action=on_action,
+        footer=_footer,
+        key_actions={
+            "P": _cycle("prov_idx", len(_PROVIDER_OPTIONS)),
+            "p": _cycle("prov_idx", len(_PROVIDER_OPTIONS)),
+            "D": _cycle("date_idx", len(_DATE_OPTIONS)),
+            "d": _cycle("date_idx", len(_DATE_OPTIONS)),
+            "S": _cycle("sort_idx", len(_SORT_OPTIONS)),
+            "s": _cycle("sort_idx", len(_SORT_OPTIONS)),
+        },
+    )
+
+    if result is None:
         return None
+
+    selected = items[result].value
+    if isinstance(selected, dict):
+        return (selected["query"], selected["provider"])
+
+    return None
+
