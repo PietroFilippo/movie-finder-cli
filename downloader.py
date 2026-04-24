@@ -11,7 +11,28 @@ import time
 import urllib.parse
 
 from constants import DOWNLOADS_DIR, console
+from state import load_setting
 from torrent_meta import compact_ranges
+
+
+_QUIET_SETTING_KEY = "hide_stream_output"
+
+
+def is_quiet_mode() -> bool:
+    """Read the persistent quiet-mode flag (suppress subprocess UI)."""
+    return bool(load_setting(_QUIET_SETTING_KEY, False))
+
+
+def _quiet_streams(quiet: bool) -> tuple[int | None, int | None]:
+    """Map the quiet flag to subprocess stdout/stderr args.
+
+    When quiet is True, returns (DEVNULL, DEVNULL) so the child's full-screen
+    progress UI is fully suppressed. When False, returns (None, None) so the
+    child inherits the parent TTY and renders natively.
+    """
+    if quiet:
+        return subprocess.DEVNULL, subprocess.DEVNULL
+    return None, None
 
 
 def _resolve_vlc_path() -> str | None:
@@ -214,8 +235,19 @@ def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = Non
         cmd.append(f"--select-file={compact_ranges(select_indexes)}")
     cmd.append(magnet_link)
 
+    quiet = is_quiet_mode()
+
     try:
-        result = subprocess.run(cmd)
+        if quiet:
+            with console.status(
+                "[bold cyan]Downloading…[/bold cyan]  Ctrl+C cancel",
+                spinner="dots",
+            ):
+                result = subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
+        else:
+            result = subprocess.run(cmd)
         console.print()
         if result.returncode == 0:
             console.print("[success] Download complete![/success]")
@@ -256,6 +288,7 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
     console.print("[bold red]To cancel, press CTRL+C at any time.[/bold red]\n")
 
     targets: list[int | None] = [i for i in (select_indexes or [])] or [None]
+    quiet = is_quiet_mode()
 
     try:
         for n, idx in enumerate(targets, 1):
@@ -264,7 +297,18 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
             cmd = [wt_path, "download", magnet_link, "--out", DOWNLOADS_DIR]
             if idx is not None:
                 cmd.extend(["--select", str(idx - 1)])  # webtorrent is 0-based
-            result = subprocess.run(cmd)
+            if quiet:
+                with console.status(
+                    f"[bold cyan]Downloading…[/bold cyan]  "
+                    f"{'session ' + str(n) + '/' + str(len(targets)) + '  •  ' if len(targets) > 1 else ''}"
+                    "Ctrl+C cancel",
+                    spinner="dots",
+                ):
+                    result = subprocess.run(
+                        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+            else:
+                result = subprocess.run(cmd)
             if result.returncode != 0:
                 console.print(f"\n[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
                 return False
@@ -306,6 +350,7 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
     console.print("[bold red]To cancel, press CTRL+C at any time.[/bold red]\n")
 
     targets: list[int | None] = [i for i in (select_indexes or [])] or [None]
+    quiet = is_quiet_mode()
 
     try:
         for n, idx in enumerate(targets, 1):
@@ -314,7 +359,18 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
             cmd = [pf_path, magnet_link, "--path", DOWNLOADS_DIR]
             if idx is not None:
                 cmd.extend(["-i", str(idx - 1)])  # peerflix is 0-based
-            result = subprocess.run(cmd)
+            if quiet:
+                with console.status(
+                    f"[bold cyan]Downloading…[/bold cyan]  "
+                    f"{'session ' + str(n) + '/' + str(len(targets)) + '  •  ' if len(targets) > 1 else ''}"
+                    "Ctrl+C cancel",
+                    spinner="dots",
+                ):
+                    result = subprocess.run(
+                        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+            else:
+                result = subprocess.run(cmd)
             if result.returncode != 0:
                 console.print(f"\n[error] Session {n} failed (exit code {result.returncode}).[/error]\n")
                 return False
@@ -363,6 +419,7 @@ def _run_stream(
     cmd: list[str],
     vlc_url: str | None,
     allow_navigate: bool,
+    quiet: bool = False,
 ) -> tuple[int, str]:
     """Run a streaming subprocess with native TTY (no stdout piping).
 
@@ -370,25 +427,42 @@ def _run_stream(
     When allow_navigate is True, 'n'/'b' terminate the subprocess so the
     caller can advance or go back in a multi-ep flow. Returns (returncode,
     nav_action) where nav_action is 'next', 'back', or 'none'.
+
+    When quiet is True, subprocess stdout/stderr are redirected to DEVNULL
+    (full-screen UI suppressed) and a rich spinner renders in its place.
     """
     url_holder: list[str | None] = [vlc_url]
     advance_event = threading.Event() if allow_navigate else None
     back_event = threading.Event() if allow_navigate else None
     stop_event = _start_vlc_hotkey_thread(url_holder, advance_event, back_event)
 
-    proc = subprocess.Popen(cmd)
+    stdout_arg, stderr_arg = _quiet_streams(quiet)
+    proc = subprocess.Popen(cmd, stdout=stdout_arg, stderr=stderr_arg)
     nav_action = "none"
-    try:
+
+    def _poll_loop() -> str:
         while proc.poll() is None:
             if advance_event is not None and advance_event.is_set():
-                nav_action = "next"
                 _kill_process_tree(proc)
-                break
+                return "next"
             if back_event is not None and back_event.is_set():
-                nav_action = "back"
                 _kill_process_tree(proc)
-                break
+                return "back"
             time.sleep(0.25)
+        return "none"
+
+    try:
+        if quiet:
+            hints = ["Ctrl+C cancel"]
+            if vlc_url:
+                hints.append("v reopen VLC")
+            if allow_navigate:
+                hints.append("n/b next/prev")
+            msg = "[bold cyan]Streaming…[/bold cyan]  " + "  •  ".join(hints)
+            with console.status(msg, spinner="dots"):
+                nav_action = _poll_loop()
+        else:
+            nav_action = _poll_loop()
     except KeyboardInterrupt:
         if proc.poll() is None:
             _kill_process_tree(proc)
@@ -591,19 +665,20 @@ def stream_with_webtorrent(
     name_by_idx = {f.index: f.name for f in file_list}
     is_multi_file = len(file_list) > 1
     torrent_name = files.name if files is not None else None
+    quiet = is_quiet_mode()
 
     try:
         ep_idx = 0
         while 0 <= ep_idx < len(targets):
             idx = targets[ep_idx]
-            
+
             if idx is not None:
                 file_path = name_by_idx.get(idx)
             elif not is_multi_file and file_list:
                 file_path = file_list[0].name
             else:
                 file_path = None
-                
+
             vlc_url = _webtorrent_vlc_url(magnet_link, torrent_name, file_path, is_multi_file)
 
             # No scroll region- webtorrent clears through them.
@@ -614,7 +689,7 @@ def stream_with_webtorrent(
             if idx is not None:
                 cmd.extend(["--select", str(idx - 1)])
 
-            rc, nav = _run_stream(cmd, vlc_url, allow_navigate=multi)
+            rc, nav = _run_stream(cmd, vlc_url, allow_navigate=multi, quiet=quiet)
 
             if nav == "next":
                 _kill_vlc()
@@ -662,19 +737,25 @@ def stream_with_peerflix(
     multi = len(targets) > 1
     vlc_url = "http://127.0.0.1:8888/"
     _ = files  # kept for API symmetry with stream_with_webtorrent
+    quiet = is_quiet_mode()
 
     try:
         ep_idx = 0
         while 0 <= ep_idx < len(targets):
             idx = targets[ep_idx]
 
-            _print_stream_header(ep_idx, len(targets), idx, multi, vlc_url)
+            # Quiet mode suppresses subprocess UI — no need for a scroll
+            # region since nothing scrolls below the header.
+            _print_stream_header(
+                ep_idx, len(targets), idx, multi, vlc_url,
+                use_scroll_region=not quiet,
+            )
 
             cmd = [pf_path, magnet_link, "--vlc", "--port", "8888"]
             if idx is not None:
                 cmd.extend(["-i", str(idx - 1)])
 
-            rc, nav = _run_stream(cmd, vlc_url, allow_navigate=multi)
+            rc, nav = _run_stream(cmd, vlc_url, allow_navigate=multi, quiet=quiet)
 
             if nav == "next":
                 _kill_vlc()

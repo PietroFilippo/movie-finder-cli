@@ -561,6 +561,25 @@ def download_method_prompt(
             description="Find a matching .srt via OpenSubtitles and save it next to the video",
         ))
 
+    # Persistent toggle: suppress subprocess UI (progress bars, peer lists) and
+    # replace it with a single spinner line. Applies to all stream + download
+    # paths on the next launch.
+    from state import load_setting
+    quiet_on = bool(load_setting("hide_stream_output", False))
+
+    def _quiet_label(on: bool) -> str:
+        return f"🔇 Quiet mode: [{'✓' if on else ' '}] {'ON' if on else 'OFF'}"
+
+    items.append(SelectItem(
+        label=_quiet_label(quiet_on),
+        value="toggle_quiet",
+        is_action=True,
+        description=(
+            "Hide the native progress UI of webtorrent/peerflix/aria2 and show "
+            "a minimal spinner instead. Persists across runs."
+        ),
+    ))
+
     # --- Trailing actions ---
     items.append(SelectItem(
         label="↩  Go back to results",
@@ -584,6 +603,12 @@ def download_method_prompt(
             except Exception:
                 items[idx].hint = "⚠ Could not copy"
             return True  # Stay in menu
+        if items[idx].value == "toggle_quiet":
+            from state import load_setting, save_setting
+            new_state = not bool(load_setting("hide_stream_output", False))
+            save_setting("hide_stream_output", new_state)
+            items[idx].label = _quiet_label(new_state)
+            return True  # Stay in menu — arrow_select redraws in place, no flicker
         return False
 
     title = "Download Method"
