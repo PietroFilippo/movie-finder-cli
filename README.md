@@ -15,7 +15,11 @@ An interactive command-line application for searching and downloading torrents d
   - Toggle built-in presets (preferred resolutions, known uploaders/repackers, trusted release groups) using an interactive checklist.
   - Toggle individual search engines on and off per provider from the same menu.
   - Add custom include/exclude keywords to quickly find the exact release you want.
+  - **Shared keybinds with the episode picker:** `a` select all • `i` invert • `c` clear presets • `w` save • `v` / `Shift+V` visual anchor + range toggle • `Space` toggle current.
   - **Persistent across runs:** your engine toggles and active filter presets are saved to `filter_state.json` next to the script, so configuration sticks after you close the program.
+- **Search History:** Press `Shift+H` at the search prompt (or `H` on the provider screen) to browse past searches. Filter by provider (`P`), date range (`D`, today/week/month), and sort order (`S`). Each entry shows the provider, relative timestamp, and the filter presets that were active at search time. Pick an entry to re-run the query; clear history with a confirmation modal.
+- **Usage Stats:** Press `Shift+S` at the search prompt (or `S` on the provider screen) to open a scrollable stats page showing session count, total runtime, searches, top queries, torrents picked, method picks vs. completions (with success rate), avg seeders of picks, and preset usage counters. Reset all stats from the same screen, guarded by a confirmation modal.
+- **Confirmation Modals:** Destructive actions (clear history, reset stats) share a unified red Y/N panel so you can't nuke state with a stray keypress.
 - **Flexible Downloading & Streaming:**
   - **System Client:** Automatically send generated magnet links to your default system torrent client (like qBittorrent, Transmission, etc.).
   - **Direct Terminal Download:** Use `aria2c`, `webtorrent-cli`, or `peerflix` integration to download files directly within the terminal, with native progress UIs.
@@ -110,7 +114,8 @@ Even after dismissing, you can re-open the warning at any time from the **Select
   - `a` (Select All) • `i` (Invert Selection) • `c` (Clear) • `w` (Save & Continue).
 - **Configure filters from the provider screen**: Press `F` while a provider is highlighted to jump straight into its engines + filter presets menu, then return to the provider list.
 - **Configure filters during search**: Press `Shift+F` at the search prompt to open the filter menu for the current provider. The status line above the prompt shows the active engines / presets and the hotkey.
-- **Clear filters**: The "Clear filters" button in the filter menu only clears preset toggles — your engine selections are preserved.
+- **Filter menu keybinds**: `a` select all, `i` invert, `c` clear presets, `w` save & confirm, `v` drop anchor, `Shift+V` range toggle between anchor and cursor, `Space` toggle current. The "Clear filters" button clears preset toggles only — your engine selections are preserved.
+- **Search history / stats from the search prompt**: `Shift+H` opens history, `Shift+S` opens usage stats. On the provider screen use `H` and `S`.
 - **Cancel / Back**: Press `Esc` to safely cancel an action, close a menu, or go back to the previous screen.
 
 
@@ -120,12 +125,13 @@ The application is structured into a modular, provider-based architecture:
 
 - `main.py`: The main entry point and CLI argument parser.
 - `providers/`: Directory containing different search categories (Movies, Games, Anime). Each provider declares its own search engines, default filters, and toggleable presets.
-- `ui/`: Controls the interactive terminal prompts and rendering of tables using the `rich` library.
+- `ui/`: Controls the interactive terminal prompts and rendering of tables using the `rich` library. Includes `prompts.py` (menus + `confirm_prompt` modal), `selector.py` (reusable arrow-key selector with windowing / marquee), `table.py` (paginated result table), `history.py` (search history browser), and `stats.py` (usage stats page).
 - `filters.py`: Logic processing for including or excluding keywords.
 - `downloader.py`: Logic handling torrent client detection and `webtorrent-cli` / `peerflix` execution.
 - `subtitles.py`: Logic for searching and downloading subtitles using `subliminal`.
 - `security.py`: Network exposure warning, public-IP/VPN detection via `ip-api.com`.
-- `state.py`: Persists engine toggles, active presets, and the dismissed-warning flag to `filter_state.json`.
+- `state.py`: Persists engine toggles, active presets, misc settings (dismissed-warning flag), and search history to `filter_state.json`.
+- `stats.py`: Usage counter recorders and read helpers; stores under the `stats` subtree of `filter_state.json`.
 - `torrent_meta.py`: Fetches a torrent's file list from a magnet via `aria2c`; helpers for episode-number extraction and `--select-file` range formatting.
 - `constants.py`: Stores configuration constants, trackers, and UI themes.
 
