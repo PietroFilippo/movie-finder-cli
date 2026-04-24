@@ -667,8 +667,14 @@ def provider_select_prompt() -> object | None:
         _filter_request["target"] = target
         return cursor  # exit menu to open filter_menu outside
 
+    from ui.tips import random_tip
+
     while True:
         _filter_request["target"] = None
+
+        # Fresh tip each time we enter the selector — but NOT on every render
+        # (that would re-roll on every keypress and make the footer jitter).
+        tip_line = random_tip()
 
         result = arrow_select(
             items,
@@ -678,7 +684,7 @@ def provider_select_prompt() -> object | None:
                 "[bold yellow]F[/bold yellow] filters  •  "
                 "[bold yellow]H[/bold yellow] history  •  "
                 "[bold yellow]S[/bold yellow] stats  •  Esc cancel\n"
-                "   Tip: For the best results, search using the complete name."
+                f"   {tip_line}"
             ),
             banner=_make_banner_panel(),
             start_index=start,
@@ -740,13 +746,21 @@ def search_again_prompt() -> str | tuple | None:
         SelectItem(label="👋 Exit", value="exit"),
     ]
 
+    from ui.tips import random_tip
+
     start = 0
     while True:
+        # Fresh tip per menu entry, fixed across the render loop.
+        tip_line = random_tip()
         idx = arrow_select(
             items,
             title="What's Next?",
             banner=_make_banner_panel(),
             start_index=start,
+            footer=(
+                "↑/↓ navigate  •  Enter select  •  Esc cancel\n"
+                f"   {tip_line}"
+            ),
         )
 
         if idx is None:
