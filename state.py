@@ -1,12 +1,23 @@
-"""Persist engine toggles, active filter presets, and misc settings across runs."""
+"""Persist engine toggles, active filter presets, history, stats, and misc settings.
 
+Mutations are held in an in-memory cache and flushed to disk at process exit
+(atexit) or on explicit ``_flush()`` calls from destructive UI sites
+(``save_state``, ``clear_history``, ``reset_stats``). Public ``save_*`` /
+``record_*`` helpers no longer hit the disk on every call.
+"""
+
+import atexit
 import json
 import os
 
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "filter_state.json")
 
+_CACHE: dict | None = None
+_DIRTY: bool = False
+_ATEXIT_REGISTERED: bool = False
 
-def _read_state() -> dict:
+
+def _load_from_disk() -> dict:
     if not os.path.exists(STATE_PATH):
         return {}
     try:
@@ -16,10 +27,33 @@ def _read_state() -> dict:
         return {}
 
 
+def _read_state() -> dict:
+    """Return the in-memory state dict, loading from disk on first call."""
+    global _CACHE, _ATEXIT_REGISTERED
+    if _CACHE is None:
+        _CACHE = _load_from_disk()
+        if not _ATEXIT_REGISTERED:
+            atexit.register(_flush)
+            _ATEXIT_REGISTERED = True
+    return _CACHE
+
+
 def _write_state(data: dict) -> None:
+    """Update the cache and mark it dirty. No disk hit — see ``_flush()``."""
+    global _CACHE, _DIRTY
+    _CACHE = data
+    _DIRTY = True
+
+
+def _flush() -> None:
+    """Persist the cache to disk if dirty. Called from atexit + destructive sites."""
+    global _DIRTY
+    if not _DIRTY or _CACHE is None:
+        return
     try:
         with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+            json.dump(_CACHE, f, indent=2)
+        _DIRTY = False
     except OSError:
         pass
 
@@ -45,7 +79,11 @@ def load_state(providers) -> None:
 
 
 def save_state(providers) -> None:
-    """Write current engine/preset selections to disk, preserving other top-level keys."""
+    """Write current engine/preset selections, preserving other top-level keys.
+
+    Flushes immediately — filter-menu Confirm is an explicit user action and
+    should survive a hard kill.
+    """
     data = _read_state()
     data["providers"] = {
         p.name: {
@@ -55,6 +93,7 @@ def save_state(providers) -> None:
         for p in providers
     }
     _write_state(data)
+    _flush()
 
 
 def load_setting(key: str, default=None):
@@ -124,5 +163,6 @@ def add_history_entry(
 
 
 def clear_history() -> None:
-    """Wipe all history entries."""
+    """Wipe all history entries. Flushes immediately — explicit destructive action."""
     save_history([])
+    _flush()

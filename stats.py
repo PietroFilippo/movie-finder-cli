@@ -6,7 +6,7 @@ Cheap given the tiny JSON and infrequent events.
 
 from datetime import datetime, timezone
 
-from state import _read_state, _write_state
+from state import _flush, _read_state, _write_state
 
 
 _STATS_KEY = "stats"
@@ -100,11 +100,12 @@ def add_runtime_seconds(seconds: float) -> None:
 
 
 def reset_stats() -> None:
-    """Wipe the stats subtree (keeps other state keys intact)."""
+    """Wipe the stats subtree (keeps other state keys intact). Flushes immediately."""
     data = _read_state()
     if _STATS_KEY in data:
         del data[_STATS_KEY]
     _write_state(data)
+    _flush()
 
 
 # ---------------------------------------------------------------------------
