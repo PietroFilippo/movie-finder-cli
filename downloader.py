@@ -11,7 +11,7 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from constants import DOWNLOADS_DIR, console
+from constants import console, get_download_dir
 from state import load_setting
 from torrent_meta import compact_ranges
 from ui.streaming import (
@@ -359,15 +359,16 @@ def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = Non
         console.print("[error] aria2c not found. Install from https://aria2.github.io/[/error]\n")
         return False
 
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
+    dl_dir = get_download_dir()
+    os.makedirs(dl_dir, exist_ok=True)
+    console.print(f"[info]Downloading to:[/info] [highlight]{dl_dir}[/highlight]")
     if select_indexes:
         console.print(f"[info]Selected files:[/info] [highlight]{compact_ranges(select_indexes)}[/highlight] ({len(select_indexes)} file(s))")
     console.print("[bold red]To cancel, press CTRL+C at any time.[/bold red]\n")
 
     cmd = [
         aria_path,
-        "-d", DOWNLOADS_DIR,
+        "-d", dl_dir,
         "--seed-time=0",
         "--summary-interval=0",
         "--console-log-level=warn",
@@ -396,7 +397,7 @@ def download_with_aria2(magnet_link: str, select_indexes: list[int] | None = Non
         console.print()
         if result.returncode == 0:
             console.print("[success] Download complete![/success]")
-            console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+            console.print(f"[info]Files saved to:[/info] [highlight]{dl_dir}[/highlight]\n")
             return True
         console.print(f"[error] Download failed (exit code {result.returncode}).[/error]\n")
         return False
@@ -422,8 +423,9 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
         console.print("[error] webtorrent-cli not found. Install with: npm install -g webtorrent-cli[/error]\n")
         return False
 
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
+    dl_dir = get_download_dir()
+    os.makedirs(dl_dir, exist_ok=True)
+    console.print(f"[info]Downloading to:[/info] [highlight]{dl_dir}[/highlight]")
     if select_indexes:
         console.print(
             "[warning] webtorrent-cli's --select does NOT always limit download to the picked "
@@ -444,7 +446,7 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
         for n, idx in enumerate(targets, 1):
             if len(targets) > 1:
                 console.print(f"[info]Session {n}/{len(targets)} — file index {idx}[/info]")
-            cmd = [wt_path, "download", magnet_link, "--out", DOWNLOADS_DIR]
+            cmd = [wt_path, "download", magnet_link, "--out", dl_dir]
             if idx is not None:
                 cmd.extend(["--select", str(idx - 1)])  # webtorrent is 0-based
             if quiet:
@@ -465,7 +467,7 @@ def download_with_webtorrent(magnet_link: str, select_indexes: list[int] | None 
 
         console.print()
         console.print("[success] Download complete![/success]")
-        console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        console.print(f"[info]Files saved to:[/info] [highlight]{dl_dir}[/highlight]\n")
         return True
 
     except KeyboardInterrupt:
@@ -489,8 +491,9 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
         console.print("[error] peerflix not found. Install with: npm install -g peerflix[/error]\n")
         return False
 
-    os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-    console.print(f"[info]Downloading to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]")
+    dl_dir = get_download_dir()
+    os.makedirs(dl_dir, exist_ok=True)
+    console.print(f"[info]Downloading to:[/info] [highlight]{dl_dir}[/highlight]")
     if select_indexes:
         console.print(
             "[warning] peerflix is a streaming tool — its -i flag only picks which file is "
@@ -511,7 +514,7 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
         for n, idx in enumerate(targets, 1):
             if len(targets) > 1:
                 console.print(f"[info]Session {n}/{len(targets)} — file index {idx}[/info]")
-            cmd = [pf_path, magnet_link, "--path", DOWNLOADS_DIR]
+            cmd = [pf_path, magnet_link, "--path", dl_dir]
             if idx is not None:
                 cmd.extend(["-i", str(idx - 1)])  # peerflix is 0-based
             if quiet:
@@ -532,7 +535,7 @@ def download_with_peerflix(magnet_link: str, select_indexes: list[int] | None = 
 
         console.print()
         console.print("[success] Download complete![/success]")
-        console.print(f"[info]Files saved to:[/info] [highlight]{DOWNLOADS_DIR}[/highlight]\n")
+        console.print(f"[info]Files saved to:[/info] [highlight]{dl_dir}[/highlight]\n")
         return True
 
     except KeyboardInterrupt:

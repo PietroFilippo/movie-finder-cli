@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from babelfish import Language
 from subliminal import Video, download_best_subtitles, save_subtitles
 
-from constants import DOWNLOADS_DIR, console
+from constants import console, get_download_dir
 
 
 def download_subtitles(torrent_name: str) -> Optional[str]:
@@ -46,18 +46,18 @@ def download_subtitles(torrent_name: str) -> Optional[str]:
             console.print("[warning]No subtitles found matching that release.[/warning]")
             return None
             
-        if not os.path.exists(DOWNLOADS_DIR):
-            os.makedirs(DOWNLOADS_DIR)
-            
-        # Temporarily change directory so save_subtitles dumps it in DOWNLOADS_DIR
+        dl_dir = get_download_dir()
+        os.makedirs(dl_dir, exist_ok=True)
+
+        # Temporarily change directory so save_subtitles dumps it in dl_dir
         original_cwd = os.getcwd()
-        os.chdir(DOWNLOADS_DIR)
-        
+        os.chdir(dl_dir)
+
         saved_paths = save_subtitles(video, subs)
         os.chdir(original_cwd)
-        
+
         if saved_paths:
-            console.print(f"\n[success]Subtitles downloaded successfully to {DOWNLOADS_DIR}![/success]")
+            console.print(f"\n[success]Subtitles downloaded successfully to {dl_dir}![/success]")
             return str(saved_paths[0])
             
     except Exception as e:

@@ -412,7 +412,7 @@ def subtitle_source_prompt(current: dict | None = None) -> dict:
     Falls back to *current* (or auto-detect) when cancelled.
     """
     import os
-    from constants import DOWNLOADS_DIR
+    from constants import get_download_dir
 
     current = current or {"mode": "auto", "path": None}
 
@@ -454,18 +454,21 @@ def subtitle_source_prompt(current: dict | None = None) -> dict:
     if val in ("auto", "off"):
         return {"mode": val, "path": None}
 
-    # external — open file picker
+    # external — open file picker, listing recent subs from the effective
+    # download dir (which may have been overridden by the user via the
+    # "📁 Save to:" menu).
+    dl_dir = get_download_dir()
     sub_files: list[tuple[str, str]] = []  # (label, abs_path)
-    if os.path.isdir(DOWNLOADS_DIR):
+    if os.path.isdir(dl_dir):
         try:
             entries = [
-                (n, os.path.getmtime(os.path.join(DOWNLOADS_DIR, n)))
-                for n in os.listdir(DOWNLOADS_DIR)
+                (n, os.path.getmtime(os.path.join(dl_dir, n)))
+                for n in os.listdir(dl_dir)
                 if n.lower().endswith((".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"))
             ]
             entries.sort(key=lambda t: -t[1])
             for fname, _ in entries[:15]:
-                sub_files.append((fname, os.path.join(DOWNLOADS_DIR, fname)))
+                sub_files.append((fname, os.path.join(dl_dir, fname)))
         except OSError:
             pass
 
@@ -512,6 +515,82 @@ def subtitle_source_prompt(current: dict | None = None) -> dict:
             return current
         return {"mode": "external", "path": os.path.abspath(path)}
     return {"mode": "external", "path": chosen}
+
+
+def download_dir_prompt() -> None:
+    """Pick the default download directory. Persists via ``save_setting`` and
+    returns to the caller — no return value. Applies to aria2, webtorrent /
+    peerflix downloads, and subtitle saves (not streams or magnet handoff)."""
+    import os
+    from constants import DOWNLOADS_DIR
+    from state import load_setting, save_setting
+
+    home_downloads = os.path.expanduser("~/Downloads")
+    current = load_setting("download_dir", None)
+
+    items = [
+        SelectItem(
+            label=f"📂 Default ({os.path.basename(DOWNLOADS_DIR)}/)",
+            value="__default__",
+            description=f"Save into the project's downloads/ folder.\nPath: {DOWNLOADS_DIR}",
+        ),
+        SelectItem(
+            label="🏠 ~/Downloads",
+            value=home_downloads,
+            description=f"Save into your user Downloads folder.\nPath: {home_downloads}",
+        ),
+        SelectItem(
+            label="✍️  Type custom path…",
+            value="__type__",
+            is_action=True,
+            description="Type or paste an absolute path. Will be created if it doesn't exist.",
+        ),
+        SelectItem(label="↩ Back", value="back", is_action=True),
+    ]
+
+    # Start cursor on the current selection when possible.
+    start = 0
+    if current == home_downloads:
+        start = 1
+    elif isinstance(current, str) and current.strip() and current != DOWNLOADS_DIR:
+        start = 2
+
+    result = arrow_select(
+        items,
+        title="Download Folder",
+        banner=_make_banner_panel(),
+        start_index=start,
+    )
+
+    if result is None:
+        return
+    chosen = items[result].value
+    if chosen == "back":
+        return
+
+    if chosen == "__default__":
+        save_setting("download_dir", None)
+        return
+
+    if chosen == "__type__":
+        try:
+            path = console.input("[info]Path to save downloads: [/info]").strip().strip('"').strip("'")
+        except (EOFError, KeyboardInterrupt):
+            return
+        if not path:
+            return
+        path = os.path.abspath(os.path.expanduser(path))
+    else:
+        path = chosen
+
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError as e:
+        console.print(f"[error] Could not create directory: {e}[/error]")
+        console.print("[dim]Press any key to continue...[/dim]")
+        readchar.readkey()
+        return
+    save_setting("download_dir", path)
 
 
 def confirm_prompt(message: str, title: str = "Confirm") -> bool:
@@ -709,6 +788,22 @@ def download_method_prompt(
             value="s",
             description="Find a matching .srt via OpenSubtitles and save it next to the video",
         ))
+
+    # Persistent download-folder override. Applies to aria2/webtorrent/peerflix
+    # downloads + subtitle saves (not streams, not magnet handoff).
+    import os as _os_dir
+    from constants import get_download_dir
+    _dl_dir = get_download_dir()
+    _dl_basename = _os_dir.path.basename(_dl_dir.rstrip(_os_dir.sep)) or _dl_dir
+    items.append(SelectItem(
+        label=f"📁 Save to: {_dl_basename}",
+        value="set_download_dir",
+        is_action=True,
+        description=(
+            f"Choose where non-magnet downloads + subtitles save to. "
+            f"Default: the project's downloads/ folder.\nCurrent: {_dl_dir}"
+        ),
+    ))
 
     # Persistent toggle: suppress subprocess UI (progress bars, peer lists) and
     # replace it with a single spinner line. Applies to all stream + download

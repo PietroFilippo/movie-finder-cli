@@ -24,6 +24,21 @@ API_URL = "https://apibay.org/q.php"
 RESULTS_PER_PAGE = 20
 DOWNLOADS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "downloads")
 
+
+def get_download_dir() -> str:
+    """Return the user's effective download directory.
+
+    Reads the persisted ``download_dir`` setting; falls back to the
+    default ``DOWNLOADS_DIR`` when unset, empty, or non-string. Callers
+    are responsible for creating the directory before writing into it
+    (existing ``os.makedirs(..., exist_ok=True)`` patterns still apply).
+    """
+    from state import load_setting
+    saved = load_setting("download_dir", None)
+    if isinstance(saved, str) and saved.strip():
+        return saved
+    return DOWNLOADS_DIR
+
 TRACKERS = [
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
