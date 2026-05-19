@@ -218,6 +218,12 @@ def _main_loop() -> None:
                     clear_screen()
                     continue
 
+                if method == "set_download_dir":
+                    from ui.prompts import download_dir_prompt
+                    download_dir_prompt()
+                    clear_screen()
+                    continue
+
                 if method == "pick_episodes":
                     clear_screen()
                     if not has_aria2():
